@@ -16,9 +16,9 @@ const settingsFile = path.join(app.getPath('userData'), 'settings.json');
 
 const appIconPath = path.resolve(__dirname, 'icon', 'akari-launcher.png');
 
-const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron');
+//const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater'); // <-- ADD THIS
-const path = require('path');
+//const path = require('path');
 
 // ... (your existing main.js imports and functions) ...
 
@@ -81,6 +81,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 950,
     height: 700,
+    title: `Akari Launcher v${app.getVersion()}`,
     resizable: true,
     icon: appIconPath,
     webPreferences: {
@@ -90,6 +91,7 @@ function createWindow() {
     }
   });
 
+  mainWindow.on('page-title-updated', (event) => event.preventDefault());
   mainWindow.loadFile('index.html');
 }
 
@@ -117,12 +119,6 @@ function createLogsWindow() {
     logsWindow = null;
   });
 }
-
-app.whenReady().then(async () => {
-  const instancesDir = await getInstancesDir();
-  await fs.ensureDir(instancesDir);
-  createWindow();
-});
 
 // --- SETTINGS / FOLDER IPC HANDLERS ---
 
