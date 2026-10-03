@@ -61,6 +61,18 @@ function parseInstanceName(input) {
   return String(input || '');
 }
 
+function resolveInstancePath(instancesDir, input) {
+  const name = parseInstanceName(input);
+  const root = path.resolve(instancesDir);
+  const instancePath = path.resolve(root, name);
+
+  if (!name || path.basename(name) !== name || path.dirname(instancePath) !== root) {
+    throw new Error('Invalid instance name');
+  }
+
+  return { name, instancePath };
+}
+
 // Unified log sender emitting on BOTH channels for backwards compatibility
 function sendLogToWindows(data) {
   const message = (typeof data === 'string') ? data : (data ? data.toString() : '');
@@ -241,12 +253,11 @@ ipcMain.handle('get-instances', async () => {
 
 ipcMain.handle('create-instance', async (event, payload) => {
   const instancesDir = await getInstancesDir();
-  const name = parseInstanceName(payload);
+  const { instancePath } = resolveInstancePath(instancesDir, payload);
   const version = (typeof payload === 'object' && payload.version) ? payload.version : '1.20.1';
   const loader = (typeof payload === 'object' && payload.loader) ? payload.loader : 'vanilla';
   const neoforgeVersion = (typeof payload === 'object' && payload.neoforgeVersion) ? payload.neoforgeVersion : null;
 
-  const instancePath = path.join(instancesDir, name);
   const modsPath = path.join(instancePath, 'mods');
   const resourcepacksPath = path.join(instancePath, 'resourcepacks');
   const shaderpacksPath = path.join(instancePath, 'shaderpacks');
@@ -262,9 +273,12 @@ ipcMain.handle('create-instance', async (event, payload) => {
 
 ipcMain.handle('delete-instance', async (event, instanceName) => {
   const instancesDir = await getInstancesDir();
-  const name = parseInstanceName(instanceName);
-  const instancePath = path.join(instancesDir, name);
+  const { instancePath } = resolveInstancePath(instancesDir, instanceName);
   if (await fs.pathExists(instancePath)) {
+    const instanceStat = await fs.lstat(instancePath);
+    if (instanceStat.isSymbolicLink()) {
+      throw new Error('Refusing to delete an instance symbolic link');
+    }
     await fs.remove(instancePath);
     return true;
   }
@@ -273,8 +287,8 @@ ipcMain.handle('delete-instance', async (event, instanceName) => {
 
 ipcMain.handle('get-instance-info', async (event, instanceName) => {
   const instancesDir = await getInstancesDir();
-  const name = parseInstanceName(instanceName);
-  const configFile = path.join(instancesDir, name, 'config.json');
+  const { instancePath } = resolveInstancePath(instancesDir, instanceName);
+  const configFile = path.join(instancePath, 'config.json');
   if (await fs.pathExists(configFile)) {
     return await fs.readJson(configFile);
   }
@@ -283,9 +297,9 @@ ipcMain.handle('get-instance-info', async (event, instanceName) => {
 
 async function loadFolderAddons(instanceName, subFolder, metaFileName) {
   const instancesDir = await getInstancesDir();
-  const name = parseInstanceName(instanceName);
-  const targetDir = path.join(instancesDir, name, subFolder);
-  const metadataPath = path.join(instancesDir, name, metaFileName);
+  const { instancePath } = resolveInstancePath(instancesDir, instanceName);
+  const targetDir = path.join(instancePath, subFolder);
+  const metadataPath = path.join(instancePath, metaFileName);
   await fs.ensureDir(targetDir);
 
   const files = await fs.readdir(targetDir);
@@ -325,7 +339,11 @@ ipcMain.handle('get-shaders', async (event, instanceName) => {
 
 ipcMain.handle('delete-addon', async (event, { instanceName, filename, type }) => {
   const instancesDir = await getInstancesDir();
-  const name = parseInstanceName(instanceName);
+  const { instancePath } = resolveInstancePath(instancesDir, instanceName);
+  if (typeof filename !== 'string' || path.basename(filename) !== filename ||
+      !/^[^<>:"/\\|?*\x00-\x1f]+\.(jar|zip)$/i.test(filename)) {
+    throw new Error('Invalid addon filename');
+  }
   let folder = 'mods';
   let metaFile = 'mods-metadata.json';
 
@@ -337,8 +355,8 @@ ipcMain.handle('delete-addon', async (event, { instanceName, filename, type }) =
     metaFile = 'shaders-metadata.json';
   }
 
-  const itemPath = path.join(instancesDir, name, folder, filename);
-  const metadataPath = path.join(instancesDir, name, metaFile);
+  const itemPath = path.join(instancePath, folder, filename);
+  const metadataPath = path.join(instancePath, metaFile);
 
   await fs.remove(itemPath);
 
@@ -412,7 +430,7 @@ ipcMain.handle('get-addon-versions', async (event, { projectId, version, loader,
 
 async function downloadProjectWithDependencies(projectIdOrSlug, instanceName, projectType, targetVersion, targetLoader, specificVersionId = null, downloadedSet = new Set()) {
   const instancesDir = await getInstancesDir();
-  const name = parseInstanceName(instanceName);
+  const { name, instancePath } = resolveInstancePath(instancesDir, instanceName);
 
   if (!projectIdOrSlug || downloadedSet.has(projectIdOrSlug)) return;
   downloadedSet.add(projectIdOrSlug);
@@ -471,6 +489,11 @@ async function downloadProjectWithDependencies(projectIdOrSlug, instanceName, pr
 
     const primaryFile = selectedVersion.files.find(f => f && f.primary) || selectedVersion.files[0];
     if (!primaryFile || !primaryFile.url) return;
+    if (typeof primaryFile.filename !== 'string' ||
+        path.basename(primaryFile.filename) !== primaryFile.filename ||
+        !/^[^<>:"/\\|?*\x00-\x1f]+\.(jar|zip)$/i.test(primaryFile.filename)) {
+      throw new Error('Modrinth returned an invalid addon filename');
+    }
 
     let subFolder = 'mods';
     let metaFile = 'mods-metadata.json';
@@ -482,11 +505,11 @@ async function downloadProjectWithDependencies(projectIdOrSlug, instanceName, pr
       metaFile = 'shaders-metadata.json';
     }
 
-    const destDir = path.join(instancesDir, name, subFolder);
+    const destDir = path.join(instancePath, subFolder);
     await fs.ensureDir(destDir);
 
     const filePath = path.join(destDir, primaryFile.filename);
-    const metadataPath = path.join(instancesDir, name, metaFile);
+    const metadataPath = path.join(instancePath, metaFile);
 
     const fileRes = await axios.get(primaryFile.url, { responseType: 'arraybuffer' });
     await fs.writeFile(filePath, Buffer.from(fileRes.data));
@@ -529,18 +552,19 @@ async function downloadProjectWithDependencies(projectIdOrSlug, instanceName, pr
     }
   } catch (err) {
     console.error(`Error downloading project ${projectIdOrSlug}:`, err.message);
+    throw err;
   }
 }
 
 ipcMain.handle('download-addon', async (event, payload) => {
   try {
     const instancesDir = await getInstancesDir();
-    const cleanInstanceName = parseInstanceName(payload.instanceName);
+    const { name: cleanInstanceName, instancePath } = resolveInstancePath(instancesDir, payload.instanceName);
     const project = payload.project;
     const projectType = payload.projectType;
     const specificVersionId = payload.versionId || null;
 
-    const configFile = path.join(instancesDir, cleanInstanceName, 'config.json');
+    const configFile = path.join(instancePath, 'config.json');
     let version = '1.20.1';
     let loader = 'vanilla';
 
@@ -569,8 +593,7 @@ ipcMain.handle('launch-instance', async (event, instanceName) => {
   }
 
   const instancesDir = await getInstancesDir();
-  const name = parseInstanceName(instanceName);
-  const instanceRoot = path.join(instancesDir, name);
+  const { name, instancePath: instanceRoot } = resolveInstancePath(instancesDir, instanceName);
   const configFile = path.join(instanceRoot, 'config.json');
   
   let version = '1.20.1';

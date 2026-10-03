@@ -581,14 +581,17 @@
 
         card.innerHTML = `
           <div class="instance-card-header">
-            <h3>${name}</h3>
-            <p>${info.version || '1.20.1'} (${(info.loader || 'VANILLA').toUpperCase()})</p>
+            <h3 class="instance-name"></h3>
+            <p class="instance-version"></p>
           </div>
           <div class="instance-card-actions">
             <button class="btn-primary btn-play">Play</button>
             <button class="btn-delete">Delete</button>
           </div>
         `;
+        card.querySelector('.instance-name').textContent = name;
+        card.querySelector('.instance-version').textContent =
+          `${info.version || '1.20.1'} (${(info.loader || 'VANILLA').toUpperCase()})`;
 
         card.addEventListener('click', () => {
           openInstanceDetails(name);
@@ -624,7 +627,12 @@
     document.getElementById('btn-create-modal').addEventListener('click', async () => {
       createModal.classList.remove('hidden');
       const mcVersions = await window.api.getMcVersions();
-      versionSelect.innerHTML = mcVersions.map(v => `<option value="${v}">${v}</option>`).join('');
+      versionSelect.replaceChildren(...mcVersions.map(v => {
+        const option = document.createElement('option');
+        option.value = v;
+        option.textContent = v;
+        return option;
+      }));
       await updateLoaderBuilds();
     });
 
@@ -692,9 +700,16 @@
         const uniqueBuilds = [...new Set(builds)];
 
         if (uniqueBuilds.length > 0) {
-          loaderVersionSelect.innerHTML = uniqueBuilds.map(v => `<option value="${v}">${v}</option>`).join('');
+          loaderVersionSelect.replaceChildren(...uniqueBuilds.map(v => {
+            const option = document.createElement('option');
+            option.value = v;
+            option.textContent = v;
+            return option;
+          }));
         } else {
-          loaderVersionSelect.innerHTML = `<option value="">No builds found for MC ${selectedMcVersion}</option>`;
+          const option = document.createElement('option');
+          option.textContent = `No builds found for MC ${selectedMcVersion}`;
+          loaderVersionSelect.replaceChildren(option);
         }
       } catch (err) {
         loaderVersionSelect.innerHTML = '<option value="">Failed to fetch loader builds</option>';
@@ -802,7 +817,9 @@
       listContainer.innerHTML = '';
 
       if (addons.length === 0) {
-        listContainer.innerHTML = `<p>No matching installed ${currentAddonTab} found.</p>`;
+        const emptyMessage = document.createElement('p');
+        emptyMessage.textContent = `No matching installed ${currentAddonTab} found.`;
+        listContainer.appendChild(emptyMessage);
         return;
       }
 
@@ -810,28 +827,36 @@
         const card = document.createElement('div');
         card.className = 'addon-card';
         
-        const versionTag = item.version ? `<span class="version-tag">v${item.version}</span>` : '';
         const changelogContent = item.changelog || item.releaseNotes || 'No changelog information provided for this release.';
 
         card.innerHTML = `
           <div class="addon-main-row">
-            <img src="${item.iconUrl || 'icon/akari-launcher.png'}" class="addon-icon" alt="icon">
+            <img class="addon-icon" alt="icon">
             <div class="addon-details">
               <div class="addon-title-row">
-                <h4>${item.title}</h4>
-                ${versionTag}
+                <h4 class="addon-title"></h4>
+                <span class="version-tag addon-version"></span>
               </div>
-              <p>${item.description || ''}</p>
+              <p class="addon-description"></p>
             </div>
             <div class="addon-actions-group">
               <button class="btn-changelog-toggle">Changelog ▼</button>
               <button class="btn-delete-addon">Remove</button>
             </div>
           </div>
-          <div class="changelog-drawer hidden">
-            ${changelogContent}
-          </div>
+          <div class="changelog-drawer hidden"></div>
         `;
+
+        const iconUrl = typeof item.iconUrl === 'string' && /^https:\/\//i.test(item.iconUrl)
+          ? item.iconUrl
+          : 'icon/akari-launcher.png';
+        card.querySelector('.addon-icon').src = iconUrl;
+        card.querySelector('.addon-title').textContent = item.title || '';
+        card.querySelector('.addon-description').textContent = item.description || '';
+        const addonVersion = card.querySelector('.addon-version');
+        addonVersion.textContent = item.version ? `v${item.version}` : '';
+        addonVersion.hidden = !item.version;
+        card.querySelector('.changelog-drawer').textContent = changelogContent;
 
         const toggleBtn = card.querySelector('.btn-changelog-toggle');
         const drawer = card.querySelector('.changelog-drawer');
@@ -917,12 +942,12 @@
 
         card.innerHTML = `
           <div class="addon-main-row">
-            <img src="${project.icon_url || 'icon/akari-launcher.png'}" class="addon-icon" alt="icon">
+            <img class="addon-icon" alt="icon">
             <div class="addon-details">
               <div class="addon-title-row">
-                <h4>${project.title}</h4>
+                <h4 class="addon-title"></h4>
               </div>
-              <p>${project.description || ''}</p>
+              <p class="addon-description"></p>
             </div>
             <div class="addon-actions-group">
               <select class="version-select-dropdown">
@@ -936,6 +961,13 @@
             <p style="color: #a1a1aa; margin: 0;">Loading release notes...</p>
           </div>
         `;
+
+        const iconUrl = typeof project.icon_url === 'string' && /^https:\/\//i.test(project.icon_url)
+          ? project.icon_url
+          : 'icon/akari-launcher.png';
+        card.querySelector('.addon-icon').src = iconUrl;
+        card.querySelector('.addon-title').textContent = project.title || '';
+        card.querySelector('.addon-description').textContent = project.description || '';
 
         const versionSelect = card.querySelector('.version-select-dropdown');
         const toggleBtn = card.querySelector('.btn-changelog-toggle');
@@ -988,7 +1020,9 @@
             });
 
             if (!compatibleVersions || compatibleVersions.length === 0) {
-              versionSelect.innerHTML = `<option value="">Incompatible with ${targetLoader ? targetLoader.toUpperCase() : ''} ${targetMcVersion}</option>`;
+              const option = document.createElement('option');
+              option.textContent = `Incompatible with ${targetLoader ? targetLoader.toUpperCase() : ''} ${targetMcVersion}`;
+              versionSelect.replaceChildren(option);
               versionSelect.disabled = true;
               installBtn.disabled = true;
               installBtn.style.opacity = '0.5';
