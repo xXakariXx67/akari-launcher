@@ -5,6 +5,156 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Akari Launcher</title>
   <style>
+    :root {
+      color-scheme: dark;
+      --page: #111116;
+      --surface: #191920;
+      --surface-raised: #20202a;
+      --surface-hover: #282832;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.14);
+      --text: #f4f1f5;
+      --muted: #a5a1ad;
+      --accent: #ff77a4;
+      --accent-strong: #ff5f96;
+      --accent-soft: rgba(255, 119, 164, 0.12);
+      --danger: #e85d75;
+      --shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+    }
+
+    body[data-theme="midnight"] {
+      --page: #08090f;
+      --surface: #10111a;
+      --surface-raised: #151621;
+      --surface-hover: #1c1d2a;
+      --text: #efedf7;
+      --muted: #9695a8;
+      --accent: #ad8cff;
+      --accent-strong: #916cff;
+      --accent-soft: rgba(173, 140, 255, 0.1);
+      --border: rgba(207, 190, 255, 0.075);
+      --border-strong: rgba(207, 190, 255, 0.14);
+      --shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
+      background:
+        radial-gradient(ellipse at 85% 0%, rgba(69, 47, 112, 0.12), transparent 34%),
+        var(--page);
+    }
+
+    body[data-theme="midnight"] .sidebar {
+      background: linear-gradient(180deg, #0c0d15, #090a11);
+    }
+
+    body[data-theme="midnight"] .instance-card {
+      background: linear-gradient(145deg, #151621, #0e0f17);
+    }
+
+    body[data-theme="midnight"] .addon-card,
+    body[data-theme="midnight"] .settings-group {
+      background: linear-gradient(145deg, #12131d, #0d0e15);
+    }
+
+    body[data-theme="midnight"] .addon-card:hover {
+      background: #151621;
+    }
+
+    body[data-theme="midnight"] input,
+    body[data-theme="midnight"] select,
+    body[data-theme="midnight"] .changelog-drawer {
+      background: #0b0c13;
+      color: var(--text);
+    }
+
+    body[data-theme="midnight"] .modal-card {
+      background: linear-gradient(145deg, #171824, #0e0f17);
+    }
+
+    body[data-theme="midnight"] .btn-secondary {
+      background: rgba(255, 255, 255, 0.035);
+      color: var(--text);
+    }
+
+    body[data-theme="light"] {
+      color-scheme: light;
+      --page: #f4f2f6;
+      --surface: #ffffff;
+      --surface-raised: #ffffff;
+      --surface-hover: #f2eaf0;
+      --border: rgba(53, 39, 56, 0.1);
+      --border-strong: rgba(53, 39, 56, 0.18);
+      --text: #29232d;
+      --muted: #706875;
+      --accent: #df4d82;
+      --accent-strong: #c9366e;
+      --accent-soft: rgba(223, 77, 130, 0.1);
+      --shadow: 0 18px 48px rgba(55, 36, 56, 0.14);
+      background: var(--page);
+    }
+
+    body[data-theme="light"] .sidebar {
+      background: linear-gradient(180deg, #fff, #f8f5f9);
+    }
+
+    body[data-theme="light"] .nav-btn.active,
+    body[data-theme="light"] .nav-btn:hover,
+    body[data-theme="light"] .addon-tab.active {
+      color: #9f315b;
+    }
+
+    body[data-theme="light"] .instance-card,
+    body[data-theme="light"] .addon-card,
+    body[data-theme="light"] .settings-group {
+      background: linear-gradient(145deg, #fff, #faf8fb);
+      box-shadow: 0 8px 24px rgba(55, 36, 56, 0.07);
+    }
+
+    body[data-theme="light"] .addon-card:hover {
+      background: #fff;
+    }
+
+    body[data-theme="light"] input,
+    body[data-theme="light"] select,
+    body[data-theme="light"] .changelog-drawer {
+      background: #fff;
+      color: var(--text);
+    }
+
+    body[data-theme="light"] .modal-card {
+      background: linear-gradient(145deg, #fff, #f8f5f9);
+    }
+
+    body[data-theme="light"] .btn-secondary {
+      background: #fff;
+      color: var(--text);
+    }
+
+    body[data-theme="light"] .launch-mode-toggle {
+      border-color: #bd386c;
+      background: #f8dce7;
+      color: #70213f;
+    }
+
+    body[data-theme="light"] .launch-mode-toggle:hover:not(:disabled) {
+      border-color: #9f2857;
+      background: #f2c7d8;
+    }
+
+    body[data-theme="light"] .launch-mode-toggle[data-mode="offline"] {
+      border-color: #6742b2;
+      background: #e8defa;
+      color: #39216b;
+    }
+
+    body[data-theme="light"] .btn-delete,
+    body[data-theme="light"] .btn-delete-addon {
+      color: #a52d49;
+    }
+
+    body[data-theme="midnight"] .nav-btn.active,
+    body[data-theme="midnight"] .nav-btn:hover,
+    body[data-theme="midnight"] .addon-tab.active {
+      color: #e1d5ff;
+    }
+
     * {
       box-sizing: border-box;
     }
@@ -12,9 +162,70 @@
     body {
       margin: 0;
       font-family: system-ui, -apple-system, sans-serif;
-      background-color: #121214;
-      color: #ff77a4;
+      background:
+        radial-gradient(ellipse at 85% 0%, rgba(105, 52, 87, 0.13), transparent 34%),
+        var(--page);
+      color: var(--text);
       overflow: hidden;
+    }
+
+    .loading-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #121214;
+      opacity: 1;
+      visibility: visible;
+      transition: opacity 600ms ease, visibility 600ms ease;
+    }
+
+    .loading-screen.is-hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .loading-logo-wrap {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 144px;
+      height: 144px;
+    }
+
+    .loading-logo {
+      width: 96px;
+      height: 96px;
+      object-fit: contain;
+    }
+
+    .loading-orbit {
+      position: absolute;
+      inset: 6px;
+      border-radius: 50%;
+      animation: loading-orbit 1.2s linear infinite;
+    }
+
+    .loading-orbit::before {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background-color: #ff77a4;
+      box-shadow: 0 0 12px #ff77a4;
+      content: "";
+      transform: translateX(-50%);
+    }
+
+    @keyframes loading-orbit {
+      to {
+        transform: rotate(360deg);
+      }
     }
 
     .app-container {
@@ -23,9 +234,10 @@
     }
 
     .sidebar {
-      width: 220px;
-      background-color: #18181c;
-      padding: 20px;
+      width: 232px;
+      background: linear-gradient(180deg, rgba(29, 28, 37, 0.98), rgba(23, 23, 30, 0.98));
+      border-right: 1px solid var(--border);
+      padding: 24px 16px 18px;
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
@@ -34,51 +246,111 @@
     .brand {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 20px;
+      gap: 12px;
+      margin: 0 4px 32px;
     }
 
     .logo {
-      width: 32px;
-      height: 32px;
+      width: 38px;
+      height: 38px;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 12px rgba(255, 95, 150, 0.22));
+    }
+
+    .brand h2 {
+      margin: 0;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
     }
 
     .nav-links {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
     }
 
     .nav-btn {
       background: none;
       border: none;
-      color: #a1a1aa;
-      padding: 10px;
+      color: var(--muted);
+      padding: 11px 12px;
       text-align: left;
       cursor: pointer;
-      border-radius: 6px;
-      font-size: 15px;
+      border-radius: 9px;
+      font-size: 14px;
+      font-weight: 550;
+      transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
     }
 
     .nav-btn.active, .nav-btn:hover {
-      background-color: #27272a;
-      color: #ffffff;
+      background: var(--accent-soft);
+      color: #ffd6e3;
+    }
+
+    .nav-btn.active {
+      box-shadow: inset 2px 0 var(--accent);
     }
 
     .user-profile {
       margin-top: auto;
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      font-size: 13px;
-      color: #a1a1aa;
+      gap: 12px;
+      padding: 16px 4px 0;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .user-profile-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .launch-mode-toggle {
+      border: 1px solid rgba(255, 119, 164, 0.24);
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: #ffd6e3;
+      padding: 8px 10px;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 650;
+      transition: background-color 160ms ease, border-color 160ms ease;
+    }
+
+    .launch-mode-toggle:hover:not(:disabled) {
+      border-color: rgba(255, 119, 164, 0.48);
+      background: rgba(255, 119, 164, 0.18);
+    }
+
+    .launch-mode-toggle[data-mode="offline"] {
+      border-color: rgba(173, 140, 255, 0.28);
+      background: rgba(173, 140, 255, 0.12);
+      color: #e1d5ff;
+    }
+
+    .launch-mode-toggle:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    .launch-mode-feedback {
+      min-height: 14px;
+      color: #ff8d9f;
+      font-size: 11px;
     }
 
     .content {
       flex: 1;
-      padding: 30px;
+      padding: 34px 38px;
       overflow-y: auto;
       height: 100vh;
+      scrollbar-color: #41404b transparent;
+      scrollbar-width: thin;
     }
 
     .view-panel {
@@ -93,13 +365,25 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
+      margin-bottom: 26px;
+    }
+
+    h1 {
+      margin: 0;
+      color: var(--text);
+      font-size: 28px;
+      font-weight: 720;
+      letter-spacing: -0.045em;
     }
 
     .title-with-back {
       display: flex;
       align-items: center;
       gap: 15px;
+    }
+
+    .title-with-back h1 {
+      font-size: 24px;
     }
 
     .header-actions {
@@ -110,21 +394,23 @@
     .instances-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 20px;
+      gap: 16px;
     }
 
     .instance-card {
-      background-color: #202024;
-      border-radius: 8px;
-      padding: 16px;
+      background: linear-gradient(145deg, rgba(36, 35, 45, 0.94), rgba(27, 27, 35, 0.96));
+      border-radius: 12px;
+      padding: 18px;
       cursor: pointer;
-      border: 1px solid #2e2e34;
-      transition: transform 0.15s ease, border-color 0.15s ease;
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
     }
 
     .instance-card:hover {
-      transform: translateY(-2px);
-      border-color: #c963f1;
+      transform: translateY(-3px);
+      border-color: rgba(255, 119, 164, 0.42);
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.24), 0 0 24px rgba(255, 119, 164, 0.06);
     }
 
     .instance-card-actions {
@@ -135,50 +421,146 @@
 
     .sub-nav {
       display: flex;
-      gap: 10px;
+      gap: 6px;
       margin-bottom: 20px;
-      border-bottom: 1px solid #2e2e34;
-      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
     }
 
     .addon-tab {
       background: none;
       border: none;
-      color: #a1a1aa;
-      padding: 8px 16px;
+      color: var(--muted);
+      padding: 10px 14px;
       cursor: pointer;
-      font-size: 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px 8px 0 0;
+      transition: background-color 160ms ease, color 160ms ease;
     }
 
     .addon-tab.active {
-      color: #ffffff;
-      border-bottom: 2px solid #6366f1;
+      color: #ffd6e3;
+      background: linear-gradient(180deg, transparent, rgba(255, 119, 164, 0.08));
+      box-shadow: inset 0 -2px var(--accent);
+    }
+
+    .instance-settings-panel {
+      display: none;
+      max-width: 720px;
+    }
+
+    .instance-settings-panel.active {
+      display: block;
+    }
+
+    .instance-settings-panel .settings-group {
+      margin-top: 0;
+    }
+
+    .instance-memory-fields {
+      margin-top: 18px;
+    }
+
+    .instance-fabric-fields,
+    .instance-version-migration {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+    }
+
+    .instance-fabric-fields[hidden] {
+      display: none;
+    }
+
+    .instance-version-migration select {
+      min-width: 180px;
+    }
+
+    .instance-version-migration .settings-row {
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .instance-version-migration select {
+      flex: 1 1 180px;
+    }
+
+    .instance-version-migration button:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    .instance-settings-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0 0;
+    }
+
+    .instance-settings-meta span {
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .instance-settings-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .instance-settings-feedback {
+      min-height: 18px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .instance-settings-feedback.is-error {
+      color: #ff8d9f;
+    }
+
+    .addon-controls[hidden],
+    .addons-list[hidden] {
+      display: none;
     }
 
     .addon-controls {
       display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
+      gap: 8px;
+      margin-bottom: 22px;
     }
 
     .addon-controls input {
       flex: 1;
-      background-color: #18181c;
-      border: 1px solid #2e2e34;
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 6px;
+      min-width: 0;
     }
 
     /* Addon Card Styling */
     .addon-card {
       display: flex;
       flex-direction: column;
-      background-color: #202024;
-      padding: 14px;
-      margin-bottom: 10px;
-      border-radius: 6px;
-      border: 1px solid #2e2e34;
+      background: rgba(30, 30, 39, 0.88);
+      padding: 16px;
+      margin-bottom: 12px;
+      border-radius: 11px;
+      border: 1px solid var(--border);
+      transition: border-color 160ms ease, background-color 160ms ease;
+    }
+
+    .addon-card:hover {
+      border-color: var(--border-strong);
+      background-color: rgba(35, 34, 44, 0.96);
+    }
+
+    .addon-card.is-disabled {
+      opacity: 0.68;
+      border-style: dashed;
     }
 
     .addon-main-row {
@@ -191,7 +573,7 @@
     .addon-icon {
       width: 44px;
       height: 44px;
-      border-radius: 6px;
+      border-radius: 9px;
       object-fit: cover;
     }
 
@@ -211,18 +593,18 @@
     }
 
     .version-tag {
-      background-color: #27272a;
-      color: #a1a1aa;
+      background-color: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
       font-size: 11px;
       padding: 2px 8px;
       border-radius: 12px;
-      border: 1px solid #3f3f46;
+      border: 1px solid var(--border);
       font-weight: 500;
     }
 
     .addon-details p {
       margin: 4px 0 0 0;
-      color: #a1a1aa;
+      color: var(--muted);
       font-size: 13px;
     }
 
@@ -232,41 +614,55 @@
       gap: 8px;
     }
 
-    .version-select-dropdown {
-      background-color: #121214;
-      border: 1px solid #3f3f46;
-      color: #fff;
+    .btn-mod-toggle {
+      background: rgba(255, 255, 255, 0.055);
+      border: 1px solid var(--border-strong);
+      color: var(--text);
       padding: 6px 10px;
-      border-radius: 6px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .btn-mod-toggle:hover {
+      border-color: rgba(255, 119, 164, 0.4);
+    }
+
+    .version-select-dropdown {
+      background-color: #17171e;
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: 8px;
       font-size: 12px;
       max-width: 210px;
     }
 
     .btn-changelog-toggle {
       background: none;
-      border: 1px solid #3f3f46;
-      color: #a1a1aa;
+      border: 1px solid var(--border-strong);
+      color: var(--muted);
       padding: 6px 10px;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
       font-size: 12px;
     }
 
     .btn-changelog-toggle:hover {
-      background-color: #27272a;
-      color: #ffffff;
+      background-color: var(--surface-hover);
+      color: var(--text);
+      border-color: rgba(255, 119, 164, 0.3);
     }
 
     .changelog-drawer {
       margin-top: 12px;
       padding-top: 12px;
-      border-top: 1px solid #2e2e34;
+      border-top: 1px solid var(--border);
       font-size: 13px;
-      color: #d4d4d8;
+      color: #d6d2dc;
       line-height: 1.4;
-      background-color: #18181c;
-      padding: 12px;
-      border-radius: 6px;
+      background-color: #17171e;
+      padding: 14px;
+      border-radius: 9px;
       white-space: pre-wrap;
       max-height: 200px;
       overflow-y: auto;
@@ -277,30 +673,52 @@
     }
 
     .btn-primary {
-      background-color: #2fa884;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
       color: #fff;
       border: none;
-      padding: 8px 16px;
-      border-radius: 6px;
+      padding: 9px 16px;
+      border-radius: 8px;
       cursor: pointer;
+      font-weight: 650;
+      box-shadow: 0 5px 14px rgba(255, 95, 150, 0.18);
+      transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+      box-shadow: 0 8px 18px rgba(255, 95, 150, 0.26);
     }
 
     .btn-secondary {
-      background-color: #27272a;
-      color: #fff;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 6px;
+      background-color: rgba(255, 255, 255, 0.055);
+      color: #e9e5ed;
+      border: 1px solid var(--border);
+      padding: 8px 15px;
+      border-radius: 8px;
       cursor: pointer;
+      font-weight: 550;
+      transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+    }
+
+    .btn-secondary:hover {
+      background-color: var(--surface-hover);
+      border-color: var(--border-strong);
     }
 
     .btn-delete, .btn-delete-addon {
-      background-color: #b163ff;
+      background-color: rgba(232, 93, 117, 0.14);
+      border: 1px solid rgba(232, 93, 117, 0.18);
       color: #fff;
-      border: none;
       padding: 6px 12px;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
+      transition: background-color 160ms ease, border-color 160ms ease;
+    }
+
+    .btn-delete:hover, .btn-delete-addon:hover {
+      background-color: rgba(232, 93, 117, 0.24);
+      border-color: rgba(232, 93, 117, 0.35);
     }
 
     .folder-picker {
@@ -311,11 +729,130 @@
 
     .folder-picker input {
       flex: 1;
-      background-color: #18181c;
-      border: 1px solid #2e2e34;
-      color: #fff;
-      padding: 8px;
-      border-radius: 6px;
+      min-width: 0;
+    }
+
+    .settings-group {
+      max-width: 720px;
+      margin-top: 22px;
+      padding: 22px;
+      background: linear-gradient(145deg, rgba(32, 31, 41, 0.92), rgba(25, 25, 32, 0.95));
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+    }
+
+    .settings-group > label {
+      display: block;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .settings-description {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .settings-row + .settings-row {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+    }
+
+    .settings-row select {
+      min-width: 160px;
+    }
+
+    .offline-skin-controls {
+      display: grid;
+      grid-template-columns: minmax(145px, 0.8fr) minmax(190px, 1.2fr);
+      gap: 8px;
+      width: min(420px, 58%);
+    }
+
+    .offline-skin-controls input,
+    .offline-skin-controls select {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .setting-toggle {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+      accent-color: var(--accent-strong);
+      cursor: pointer;
+    }
+
+    .settings-feedback {
+      min-height: 18px;
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .settings-feedback.is-error {
+      color: #ff8d9f;
+    }
+
+    .memory-fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .memory-fields .form-group {
+      min-width: 0;
+    }
+
+    .memory-fields input {
+      width: 100%;
+    }
+
+    .form-hint {
+      margin: -4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    input, select {
+      background: #15151c;
+      border: 1px solid var(--border-strong);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 8px;
+      font: inherit;
+      transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+    }
+
+    input::placeholder {
+      color: #777482;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: rgba(255, 119, 164, 0.72);
+      box-shadow: 0 0 0 3px rgba(255, 119, 164, 0.12);
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
 
     /* Modal Overlay Styling */
@@ -325,7 +862,9 @@
       left: 0;
       width: 100vw;
       height: 100vh;
-      background-color: rgba(0, 0, 0, 0.7);
+      padding: 24px;
+      background-color: rgba(8, 8, 12, 0.76);
+      backdrop-filter: blur(8px);
       display: flex;
       justify-content: center;
       align-items: center;
@@ -337,23 +876,28 @@
     }
 
     .modal-card {
-      background-color: #18181c;
-      border: 1px solid #2e2e34;
-      border-radius: 8px;
-      padding: 24px;
-      width: 400px;
+      background: linear-gradient(145deg, #22212b, #191920);
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      padding: 26px;
+      width: min(400px, 100%);
       display: flex;
       flex-direction: column;
       gap: 15px;
+      box-shadow: var(--shadow);
     }
 
     .modal-card.large {
-      width: 750px;
+      width: min(750px, 100%);
       max-height: 85vh;
+      overflow: hidden;
     }
 
     .modal-card h2 {
       margin: 0 0 10px 0;
+      color: var(--text);
+      font-size: 21px;
+      letter-spacing: -0.03em;
     }
 
     .modal-results-list {
@@ -373,15 +917,7 @@
 
     .form-group label {
       font-size: 13px;
-      color: #a1a1aa;
-    }
-
-    .form-group input, .form-group select {
-      background-color: #121214;
-      border: 1px solid #2e2e34;
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 6px;
+      color: var(--muted);
     }
 
     .form-group.hidden {
@@ -394,9 +930,78 @@
       gap: 10px;
       margin-top: 10px;
     }
+
+    @media (max-width: 700px) {
+      .sidebar {
+        width: 190px;
+        padding-right: 12px;
+        padding-left: 12px;
+      }
+
+      .content {
+        padding: 26px 22px;
+      }
+
+      .header-bar {
+        align-items: flex-start;
+        gap: 16px;
+      }
+
+      .header-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .addon-controls {
+        flex-wrap: wrap;
+      }
+
+      .addon-controls input {
+        flex-basis: 100%;
+      }
+
+      .addon-main-row {
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+
+      .addon-actions-group {
+        width: 100%;
+        flex-wrap: wrap;
+        padding-left: 59px;
+      }
+
+      .settings-group {
+        padding: 18px;
+      }
+
+      .settings-row {
+        align-items: flex-start;
+      }
+
+      .offline-skin-controls {
+        width: 100%;
+        grid-template-columns: minmax(125px, 0.8fr) minmax(160px, 1.2fr);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>
+  <div id="loading-screen" class="loading-screen" role="status" aria-label="Loading Akari Launcher">
+    <div class="loading-logo-wrap">
+      <img src="icon/akari-launcher.png" alt="" class="loading-logo">
+      <span class="loading-orbit" aria-hidden="true"></span>
+    </div>
+  </div>
   <div class="app-container">
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
@@ -410,7 +1015,11 @@
       </nav>
       <div class="user-profile">
         <span id="user-display">Logged in as: Offline</span>
-        <button id="auth-btn" class="btn-secondary">Log In</button>
+        <div class="user-profile-actions">
+          <button id="auth-btn" class="btn-secondary">Log In</button>
+          <button id="launch-mode-toggle" class="launch-mode-toggle" type="button" data-mode="microsoft" aria-pressed="false" aria-label="Switch to offline launch mode" title="Click to switch launch mode" disabled>Online</button>
+        </div>
+        <span id="launch-mode-feedback" class="launch-mode-feedback" aria-live="polite"></span>
       </div>
     </aside>
 
@@ -444,6 +1053,7 @@
           <button class="addon-tab active" data-tab="mods">Mods</button>
           <button class="addon-tab" data-tab="resourcepacks">Resource Packs</button>
           <button class="addon-tab" data-tab="shaders">Shaders</button>
+          <button class="addon-tab" data-tab="settings">Settings</button>
         </div>
 
         <div class="addon-controls">
@@ -453,17 +1063,114 @@
         </div>
 
         <div id="addons-list" class="addons-list"></div>
+        <section id="instance-settings-panel" class="instance-settings-panel" aria-label="Instance settings">
+          <div class="settings-group">
+            <div>
+              <label>Instance configuration</label>
+              <p class="settings-description">These settings apply only to this instance. Change its Fabric build or migrate Minecraft and update compatible mods below.</p>
+            </div>
+            <div class="instance-settings-meta">
+              <span id="instance-settings-version">Minecraft —</span>
+              <span id="instance-settings-loader">Loader —</span>
+            </div>
+            <div class="memory-fields instance-memory-fields" aria-label="Instance memory allocation">
+              <div class="form-group">
+                <label for="instance-memory-min">Minimum memory (GB)</label>
+                <input type="number" id="instance-memory-min" min="1" max="32" step="1" value="2">
+              </div>
+              <div class="form-group">
+                <label for="instance-memory-max">Maximum memory (GB)</label>
+                <input type="number" id="instance-memory-max" min="1" max="32" step="1" value="4">
+              </div>
+              <p class="form-hint">Choose whole numbers from 1 to 32 GB. Maximum must be at least the minimum.</p>
+            </div>
+            <div id="instance-fabric-fields" class="instance-fabric-fields" hidden>
+              <div class="form-group">
+                <label for="instance-fabric-version">Fabric Loader version</label>
+                <select id="instance-fabric-version"></select>
+              </div>
+              <p class="form-hint">Choose which Fabric Loader build this instance uses.</p>
+            </div>
+            <div class="instance-version-migration">
+              <label for="instance-target-version">Minecraft version and mod updates</label>
+              <p class="settings-description">Select a Minecraft release. Compatible Modrinth mods will be updated; mods without a compatible release or saved Modrinth project ID will be disabled, not deleted.</p>
+              <div class="settings-row">
+                <select id="instance-target-version" aria-label="Target Minecraft version"></select>
+                <button id="btn-migrate-instance" class="btn-secondary">Change Version &amp; Update Mods</button>
+              </div>
+            </div>
+            <div class="instance-settings-actions">
+              <button id="btn-save-instance-settings" class="btn-primary">Save Settings</button>
+              <p id="instance-settings-feedback" class="instance-settings-feedback" aria-live="polite"></p>
+            </div>
+          </div>
+        </section>
       </section>
 
       <!-- VIEW 3: Settings -->
       <section id="view-settings" class="view-panel">
         <h1>Settings</h1>
         <div class="settings-group">
-          <label>Instances Storage Folder:</label>
+          <div class="settings-row">
+            <div>
+              <label for="setting-theme">Appearance</label>
+              <p class="settings-description">Choose the look of Akari Launcher.</p>
+            </div>
+            <select id="setting-theme">
+              <option value="dark">Dark</option>
+              <option value="midnight">Midnight</option>
+              <option value="light">Light</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <div>
+              <label for="setting-auto-updates">Check for launcher updates</label>
+              <p class="settings-description">Check for new versions when Akari starts.</p>
+            </div>
+            <input class="setting-toggle" type="checkbox" id="setting-auto-updates">
+          </div>
+          <div class="settings-row">
+            <div>
+              <label for="setting-launch-mode">Minecraft launch mode</label>
+              <p class="settings-description">Offline mode skips Microsoft authentication and only works on servers that allow offline/cracked accounts.</p>
+            </div>
+            <select id="setting-launch-mode">
+              <option value="microsoft">Microsoft account</option>
+              <option value="offline">Offline mode</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <div>
+              <label for="setting-offline-username">Offline player name</label>
+              <p class="settings-description">Use 3–16 letters, numbers, or underscores.</p>
+            </div>
+            <input id="setting-offline-username" type="text" minlength="3" maxlength="16" pattern="[A-Za-z0-9_]{3,16}" value="Player" autocomplete="off">
+          </div>
+          <div class="settings-row">
+            <div>
+              <label for="setting-offline-skin-mode">Offline skin</label>
+              <p class="settings-description">Client-side only; other players may not see it. Works in Offline mode with Fabric, Forge, or NeoForge; URLs must be direct HTTPS images.</p>
+            </div>
+            <div class="offline-skin-controls">
+              <select id="setting-offline-skin-mode" aria-label="Offline skin source">
+                <option value="none">No custom skin</option>
+                <option value="url">HTTPS image URL</option>
+                <option value="mojang">Mojang username</option>
+              </select>
+              <input id="setting-offline-skin-value" type="text" maxlength="2048" placeholder="Choose a skin source" autocomplete="off" disabled>
+            </div>
+          </div>
+          <div class="settings-row">
+            <div>
+              <label for="input-download-path">Instances Storage Folder</label>
+              <p class="settings-description">Where Minecraft instances and their files are stored.</p>
+            </div>
+          </div>
           <div class="folder-picker">
             <input type="text" id="input-download-path" readonly>
             <button id="btn-change-folder" class="btn-secondary">Browse</button>
           </div>
+          <p id="settings-feedback" class="settings-feedback" aria-live="polite"></p>
         </div>
       </section>
     </main>
@@ -494,6 +1201,17 @@
         <label id="loader-version-label" for="create-loader-version">Loader Build</label>
         <select id="create-loader-version"></select>
       </div>
+      <div class="memory-fields" aria-label="Instance memory allocation">
+        <div class="form-group">
+          <label for="create-memory-min">Minimum memory (GB)</label>
+          <input type="number" id="create-memory-min" min="1" max="32" step="1" value="2">
+        </div>
+        <div class="form-group">
+          <label for="create-memory-max">Maximum memory (GB)</label>
+          <input type="number" id="create-memory-max" min="1" max="32" step="1" value="4">
+        </div>
+        <p class="form-hint">Choose between 1 and 32 GB. Maximum must be at least the minimum.</p>
+      </div>
       <div class="modal-actions">
         <button id="btn-cancel-create" class="btn-secondary">Cancel</button>
         <button id="btn-confirm-create" class="btn-primary">Create</button>
@@ -520,7 +1238,9 @@
     let currentInstance = null;
     let currentAddonTab = 'mods';
     let currentUser = null;
+    let currentLaunchMode = 'microsoft';
     let installedAddonsCache = [];
+    let currentInstanceInfo = null;
 
     // --- NAVIGATION ---
     function showView(viewId) {
@@ -723,24 +1443,40 @@
       const version = versionSelect.value;
       const loader = loaderSelect.value;
       const loaderVersion = loader !== 'vanilla' ? loaderVersionSelect.value : null;
+      const minMemory = Number(document.getElementById('create-memory-min').value);
+      const maxMemory = Number(document.getElementById('create-memory-max').value);
+      if (!Number.isInteger(minMemory) || !Number.isInteger(maxMemory) ||
+          minMemory < 1 || maxMemory > 32 || minMemory > maxMemory) {
+        return alert('Memory values must be whole numbers between 1 and 32 GB, and maximum must be at least minimum.');
+      }
 
-      await window.api.createInstance({ 
-        name, 
-        version, 
-        loader, 
-        neoforgeVersion: loader === 'neoforge' ? loaderVersion : null,
-        loaderVersion: loaderVersion
-      });
+      try {
+        await window.api.createInstance({
+          name,
+          version,
+          loader,
+          neoforgeVersion: loader === 'neoforge' ? loaderVersion : null,
+          loaderVersion,
+          memory: { min: minMemory, max: maxMemory }
+        });
 
-      createModal.classList.add('hidden');
-      document.getElementById('create-name').value = '';
-      loadInstances();
+        createModal.classList.add('hidden');
+        document.getElementById('create-name').value = '';
+        loadInstances();
+      } catch (error) {
+        console.error('Failed to create instance:', error);
+        alert(`Failed to create instance: ${error.message}`);
+      }
     });
 
     // --- INSTANCE DETAILS & TAB MANAGEMENT ---
     async function openInstanceDetails(instanceName) {
       currentInstance = instanceName;
       document.getElementById('selected-instance-title').innerText = instanceName;
+      currentAddonTab = 'mods';
+      document.querySelectorAll('.addon-tab').forEach(tabBtn => {
+        tabBtn.classList.toggle('active', tabBtn.dataset.tab === currentAddonTab);
+      });
       showView('view-instance-details');
       updateTabControlsUI();
       loadAddonsForCurrentTab();
@@ -752,14 +1488,25 @@
         e.target.classList.add('active');
         currentAddonTab = e.target.dataset.tab;
         updateTabControlsUI();
-        loadAddonsForCurrentTab();
+        if (currentAddonTab === 'settings') {
+          loadInstanceSettings();
+        } else {
+          loadAddonsForCurrentTab();
+        }
       });
     });
 
     function updateTabControlsUI() {
       const searchInput = document.getElementById('addon-search-input');
       const addBtn = document.getElementById('btn-add-addon');
+      const addonControls = document.querySelector('.addon-controls');
+      const addonsList = document.getElementById('addons-list');
+      const settingsPanel = document.getElementById('instance-settings-panel');
       searchInput.value = '';
+      const isSettingsTab = currentAddonTab === 'settings';
+      addonControls.hidden = isSettingsTab;
+      addonsList.hidden = isSettingsTab;
+      settingsPanel.classList.toggle('active', isSettingsTab);
 
       if (currentAddonTab === 'mods') {
         searchInput.placeholder = 'Search installed mods...';
@@ -772,6 +1519,132 @@
         addBtn.innerText = '+ Add Shaders';
       }
     }
+
+    async function loadInstanceSettings() {
+      if (!currentInstance) return;
+      const feedback = document.getElementById('instance-settings-feedback');
+      feedback.textContent = 'Loading settings...';
+      feedback.classList.remove('is-error');
+      try {
+        const info = await window.api.getInstanceInfo(currentInstance);
+        currentInstanceInfo = info;
+        const memory = info.memory || { min: 2, max: 4 };
+        document.getElementById('instance-settings-version').textContent =
+          `Minecraft ${info.version || '1.20.1'}`;
+        document.getElementById('instance-settings-loader').textContent =
+          `Loader ${(info.loader || 'vanilla').toUpperCase()}`;
+        document.getElementById('instance-memory-min').value =
+          memory.min === undefined ? 2 : memory.min;
+        document.getElementById('instance-memory-max').value =
+          memory.max === undefined ? 4 : memory.max;
+        const targetVersionSelect = document.getElementById('instance-target-version');
+        const minecraftVersions = await window.api.getMcVersions();
+        const minecraftOptions = [...new Set([info.version || '1.20.1', ...minecraftVersions])];
+        targetVersionSelect.replaceChildren(...minecraftOptions.map(version => {
+          const option = document.createElement('option');
+          option.value = version;
+          option.textContent = version;
+          return option;
+        }));
+        targetVersionSelect.value = info.version || '1.20.1';
+
+        const fabricFields = document.getElementById('instance-fabric-fields');
+        fabricFields.hidden = (info.loader || 'vanilla').toLowerCase() !== 'fabric';
+        if (!fabricFields.hidden) {
+          const fabricVersions = await window.api.getFabricVersions(info.version || '1.20.1');
+          const fabricSelect = document.getElementById('instance-fabric-version');
+          fabricSelect.replaceChildren(...fabricVersions.map(version => {
+            const option = document.createElement('option');
+            option.value = version;
+            option.textContent = version;
+            return option;
+          }));
+          if (info.loaderVersion && !fabricVersions.includes(info.loaderVersion)) {
+            const savedVersion = document.createElement('option');
+            savedVersion.value = info.loaderVersion;
+            savedVersion.textContent = `${info.loaderVersion} (saved)`;
+            fabricSelect.prepend(savedVersion);
+          }
+          if (fabricSelect.options.length === 0) {
+            throw new Error(`No Fabric Loader builds found for Minecraft ${info.version || '1.20.1'}`);
+          }
+          fabricSelect.value = info.loaderVersion || fabricVersions[0];
+        }
+        feedback.textContent = '';
+      } catch (error) {
+        console.error('Failed to load instance settings:', error);
+        feedback.textContent = `Could not load settings: ${error.message}`;
+        feedback.classList.add('is-error');
+      }
+    }
+
+    document.getElementById('btn-save-instance-settings').addEventListener('click', async () => {
+      if (!currentInstance) return;
+      const min = Number(document.getElementById('instance-memory-min').value);
+      const max = Number(document.getElementById('instance-memory-max').value);
+      const feedback = document.getElementById('instance-settings-feedback');
+      if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || max > 32 || min > max) {
+        feedback.textContent = 'Enter whole numbers from 1 to 32 GB; maximum must be at least minimum.';
+        feedback.classList.add('is-error');
+        return;
+      }
+
+      feedback.textContent = 'Saving...';
+      feedback.classList.remove('is-error');
+      try {
+        await window.api.saveInstanceSettings({
+          instanceName: currentInstance,
+          memory: { min, max },
+          ...(currentInstanceInfo && (currentInstanceInfo.loader || '').toLowerCase() === 'fabric'
+            ? { loaderVersion: document.getElementById('instance-fabric-version').value }
+            : {})
+        });
+        feedback.textContent = 'Instance settings saved.';
+        await loadInstanceSettings();
+        await loadInstances();
+      } catch (error) {
+        console.error('Failed to save instance settings:', error);
+        feedback.textContent = `Could not save settings: ${error.message}`;
+        feedback.classList.add('is-error');
+      }
+    });
+
+    document.getElementById('btn-migrate-instance').addEventListener('click', async () => {
+      if (!currentInstance) return;
+      const version = document.getElementById('instance-target-version').value;
+      const feedback = document.getElementById('instance-settings-feedback');
+      if (!version) {
+        feedback.textContent = 'Select a Minecraft version first.';
+        feedback.classList.add('is-error');
+        return;
+      }
+      if (!confirm(`Change "${currentInstance}" to Minecraft ${version}? Compatible Modrinth mods will be updated. Mods without a compatible release will be disabled, not deleted.`)) {
+        return;
+      }
+
+      const button = document.getElementById('btn-migrate-instance');
+      button.disabled = true;
+      button.textContent = 'Updating mods...';
+      feedback.textContent = 'Checking mod compatibility and downloading updates...';
+      feedback.classList.remove('is-error');
+      try {
+        const result = await window.api.migrateInstanceVersion({
+          instanceName: currentInstance,
+          version
+        });
+        await loadInstanceSettings();
+        await loadInstances();
+        feedback.textContent =
+          `Minecraft updated to ${result.version}. Updated ${result.updated.length} mod(s); ${result.disabled.length} mod(s) disabled.`;
+      } catch (error) {
+        console.error('Failed to migrate instance version:', error);
+        feedback.textContent = `Could not update instance: ${error.message}`;
+        feedback.classList.add('is-error');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Change Version & Update Mods';
+      }
+    });
 
     async function loadAddonsForCurrentTab() {
       if (!currentInstance) return;
@@ -797,7 +1670,7 @@
         const title = (item.title || '').toLowerCase();
         const desc = (item.description || '').toLowerCase();
         const filename = (item.filename || '').toLowerCase();
-        const version = (item.version || '').toLowerCase();
+        const version = (item.versionNumber || item.version || '').toLowerCase();
         return title.includes(query) || desc.includes(query) || filename.includes(query) || version.includes(query);
       });
 
@@ -825,7 +1698,7 @@
 
       addons.forEach(item => {
         const card = document.createElement('div');
-        card.className = 'addon-card';
+        card.className = `addon-card${item.enabled === false ? ' is-disabled' : ''}`;
         
         const changelogContent = item.changelog || item.releaseNotes || 'No changelog information provided for this release.';
 
@@ -836,10 +1709,12 @@
               <div class="addon-title-row">
                 <h4 class="addon-title"></h4>
                 <span class="version-tag addon-version"></span>
+                ${currentAddonTab === 'mods' ? '<span class="version-tag mod-state"></span>' : ''}
               </div>
               <p class="addon-description"></p>
             </div>
             <div class="addon-actions-group">
+              ${currentAddonTab === 'mods' ? '<button class="btn-mod-toggle"></button>' : ''}
               <button class="btn-changelog-toggle">Changelog ▼</button>
               <button class="btn-delete-addon">Remove</button>
             </div>
@@ -854,9 +1729,35 @@
         card.querySelector('.addon-title').textContent = item.title || '';
         card.querySelector('.addon-description').textContent = item.description || '';
         const addonVersion = card.querySelector('.addon-version');
-        addonVersion.textContent = item.version ? `v${item.version}` : '';
-        addonVersion.hidden = !item.version;
+        const installedVersion = item.versionNumber || item.version;
+        addonVersion.textContent = installedVersion ? `v${installedVersion}` : '';
+        addonVersion.hidden = !installedVersion;
         card.querySelector('.changelog-drawer').textContent = changelogContent;
+
+        if (currentAddonTab === 'mods') {
+          const stateTag = card.querySelector('.mod-state');
+          const toggleButton = card.querySelector('.btn-mod-toggle');
+          const isEnabled = item.enabled !== false;
+          stateTag.textContent = isEnabled ? '' : 'Disabled';
+          stateTag.hidden = isEnabled;
+          toggleButton.textContent = isEnabled ? 'Disable' : 'Enable';
+          toggleButton.setAttribute('aria-label', `${isEnabled ? 'Disable' : 'Enable'} ${item.title || item.filename}`);
+          toggleButton.addEventListener('click', async () => {
+            toggleButton.disabled = true;
+            try {
+              await window.api.setModEnabled({
+                instanceName: currentInstance,
+                filename: item.filename,
+                enabled: !isEnabled
+              });
+              await loadAddonsForCurrentTab();
+            } catch (error) {
+              console.error('Failed to change mod enabled state:', error);
+              alert(`Could not ${isEnabled ? 'disable' : 'enable'} mod: ${error.message}`);
+              toggleButton.disabled = false;
+            }
+          });
+        }
 
         const toggleBtn = card.querySelector('.btn-changelog-toggle');
         const drawer = card.querySelector('.changelog-drawer');
@@ -1100,6 +2001,22 @@
     // --- USER AUTHENTICATION ---
     const authBtn = document.getElementById('auth-btn');
     const userDisplay = document.getElementById('user-display');
+    const launchModeToggle = document.getElementById('launch-mode-toggle');
+    const launchModeFeedback = document.getElementById('launch-mode-feedback');
+
+    function updateLaunchModeUI(mode) {
+      currentLaunchMode = mode === 'offline' ? 'offline' : 'microsoft';
+      launchModeToggle.dataset.mode = currentLaunchMode;
+      launchModeToggle.textContent = currentLaunchMode === 'offline' ? 'Offline' : 'Online';
+      launchModeToggle.setAttribute('aria-pressed', String(currentLaunchMode === 'offline'));
+      launchModeToggle.setAttribute(
+        'aria-label',
+        `Current mode: ${currentLaunchMode === 'offline' ? 'offline' : 'online'}. Switch to ${currentLaunchMode === 'offline' ? 'online' : 'offline'} mode`
+      );
+      const modeSelect = document.getElementById('setting-launch-mode');
+      modeSelect.value = currentLaunchMode;
+      updateOfflineUsernameAvailability();
+    }
 
     async function checkSavedUser() {
       const user = await window.api.getSavedUser();
@@ -1125,6 +2042,25 @@
       }
     });
 
+    launchModeToggle.addEventListener('click', async () => {
+      launchModeToggle.disabled = true;
+      launchModeFeedback.textContent = '';
+      try {
+        const preferences = await window.api.getAppSettings();
+        const launchMode = currentLaunchMode === 'offline' ? 'microsoft' : 'offline';
+        await window.api.saveAppSettings({
+          ...preferences,
+          launchMode
+        });
+        updateLaunchModeUI(launchMode);
+      } catch (error) {
+        console.error('Failed to switch launch mode:', error);
+        launchModeFeedback.textContent = `Could not switch mode: ${error.message}`;
+      } finally {
+        launchModeToggle.disabled = false;
+      }
+    });
+
     // --- SETTINGS & BUTTON LISTENERS ---
     document.getElementById('btn-launch-selected').addEventListener('click', () => {
       triggerInstanceLaunch(currentInstance);
@@ -1135,8 +2071,104 @@
     });
 
     async function loadSettings() {
-      const path = await window.api.getDownloadLocation();
-      document.getElementById('input-download-path').value = path;
+      try {
+        const [path, preferences] = await Promise.all([
+          window.api.getDownloadLocation(),
+          window.api.getAppSettings()
+        ]);
+        document.getElementById('input-download-path').value = path;
+        document.getElementById('setting-theme').value = preferences.theme;
+        document.getElementById('setting-auto-updates').checked = preferences.autoCheckUpdates;
+        document.getElementById('setting-offline-username').value = preferences.offlineUsername || 'Player';
+        document.getElementById('setting-offline-skin-mode').value = preferences.offlineSkinMode || 'none';
+        document.getElementById('setting-offline-skin-value').value = preferences.offlineSkinValue || '';
+        updateOfflineSkinControls();
+        updateLaunchModeUI(preferences.launchMode || 'microsoft');
+        launchModeToggle.disabled = false;
+        applyTheme(preferences.theme);
+      } catch (error) {
+        console.error('Failed to load settings:', error);
+        setSettingsFeedback(`Could not load settings: ${error.message}`, true);
+      }
+    }
+
+    function applyTheme(theme) {
+      document.body.dataset.theme = theme;
+    }
+
+    function setSettingsFeedback(message, isError = false) {
+      const feedback = document.getElementById('settings-feedback');
+      feedback.textContent = message;
+      feedback.classList.toggle('is-error', isError);
+    }
+
+    async function saveGeneralSettings() {
+      const theme = document.getElementById('setting-theme').value;
+      const autoCheckUpdates = document.getElementById('setting-auto-updates').checked;
+      const launchMode = document.getElementById('setting-launch-mode').value;
+      const offlineUsername = document.getElementById('setting-offline-username').value.trim();
+      const offlineSkinMode = document.getElementById('setting-offline-skin-mode').value;
+      const offlineSkinValue = document.getElementById('setting-offline-skin-value').value.trim();
+      if (!/^[A-Za-z0-9_]{3,16}$/.test(offlineUsername)) {
+        setSettingsFeedback('Offline player names must be 3–16 letters, numbers, or underscores.', true);
+        return;
+      }
+      if (offlineSkinMode === 'url') {
+        let validUrl = false;
+        try {
+          const url = new URL(offlineSkinValue);
+          validUrl = url.protocol === 'https:' && Boolean(url.hostname) &&
+            !url.username && !url.password && offlineSkinValue.length <= 2048;
+        } catch {}
+        if (!validUrl) {
+          setSettingsFeedback('Enter a direct image URL that starts with https://.', true);
+          return;
+        }
+      } else if (offlineSkinMode === 'mojang' && !/^[A-Za-z0-9_]{3,16}$/.test(offlineSkinValue)) {
+        setSettingsFeedback('Enter a valid Mojang username (3–16 letters, numbers, or underscores).', true);
+        return;
+      }
+      applyTheme(theme);
+      setSettingsFeedback('Saving...');
+      try {
+        await window.api.saveAppSettings({
+          theme, autoCheckUpdates, launchMode, offlineUsername,
+          offlineSkinMode, offlineSkinValue
+        });
+        updateLaunchModeUI(launchMode);
+        launchModeToggle.disabled = false;
+        setSettingsFeedback('Settings saved.');
+      } catch (error) {
+        console.error('Failed to save settings:', error);
+        setSettingsFeedback(`Could not save settings: ${error.message}`, true);
+      }
+    }
+
+    document.getElementById('setting-theme').addEventListener('change', saveGeneralSettings);
+    document.getElementById('setting-auto-updates').addEventListener('change', saveGeneralSettings);
+    document.getElementById('setting-launch-mode').addEventListener('change', saveGeneralSettings);
+    document.getElementById('setting-offline-username').addEventListener('change', saveGeneralSettings);
+    document.getElementById('setting-offline-skin-mode').addEventListener('change', () => {
+      updateOfflineSkinControls();
+      saveGeneralSettings();
+    });
+    document.getElementById('setting-offline-skin-value').addEventListener('change', saveGeneralSettings);
+
+    function updateOfflineSkinControls() {
+      const mode = document.getElementById('setting-offline-skin-mode').value;
+      const input = document.getElementById('setting-offline-skin-value');
+      input.disabled = mode === 'none';
+      input.placeholder = mode === 'url'
+        ? 'https://example.com/skin.png'
+        : mode === 'mojang'
+          ? 'Mojang username'
+          : 'Choose a skin source';
+      input.maxLength = mode === 'mojang' ? 16 : 2048;
+    }
+
+    function updateOfflineUsernameAvailability() {
+      const offlineMode = document.getElementById('setting-launch-mode').value === 'offline';
+      document.getElementById('setting-offline-username').disabled = !offlineMode;
     }
 
     document.getElementById('btn-change-folder').addEventListener('click', async () => {
@@ -1144,12 +2176,26 @@
       if (res.success) {
         document.getElementById('input-download-path').value = res.path;
         loadInstances();
+        setSettingsFeedback('Instances folder updated.');
       }
     });
 
     // Initial Startup
     checkSavedUser();
     loadInstances();
+    loadSettings();
+
+    function dismissLoadingScreen() {
+      const loadingScreen = document.getElementById('loading-screen');
+      if (!loadingScreen) return;
+
+      loadingScreen.classList.add('is-hidden');
+      setTimeout(() => loadingScreen.remove(), 700);
+    }
+
+    window.addEventListener('load', () => {
+      setTimeout(dismissLoadingScreen, 1200);
+    }, { once: true });
   </script>
 </body>
 </html>
