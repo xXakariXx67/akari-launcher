@@ -4,11 +4,17 @@ contextBridge.exposeInMainWorld('api', {
   // Navigation & Management
   getInstances: () => ipcRenderer.invoke('get-instances'),
   getInstanceInfo: (name) => ipcRenderer.invoke('get-instance-info', name),
+  saveInstanceSettings: (payload) => ipcRenderer.invoke('save-instance-settings', payload),
+  getFabricVersions: (version) => ipcRenderer.invoke('get-fabric-versions', version),
+  migrateInstanceVersion: (payload) => ipcRenderer.invoke('migrate-instance-version', payload),
+  setModEnabled: (payload) => ipcRenderer.invoke('set-mod-enabled', payload),
   getMcVersions: () => ipcRenderer.invoke('get-mc-versions'),
   createInstance: (payload) => ipcRenderer.invoke('create-instance', payload),
   deleteInstance: (name) => ipcRenderer.invoke('delete-instance', name),
   
   // Storage & Settings
+  getAppSettings: () => ipcRenderer.invoke('get-app-settings'),
+  saveAppSettings: (settings) => ipcRenderer.invoke('save-app-settings', settings),
   getDownloadLocation: () => ipcRenderer.invoke('get-download-location'),
   selectDownloadLocation: () => ipcRenderer.invoke('select-download-location'),
   

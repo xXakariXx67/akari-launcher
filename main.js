@@ -2,8 +2,9 @@ const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs-extra');
 const axios = require('axios');
+const crypto = require('crypto');
 const { Auth } = require('msmc');
-const { Client } = require('minecraft-launcher-core');
+const { Client, Authenticator } = require('minecraft-launcher-core');
 const { execSync } = require('child_process');
 
 let mainWindow;
@@ -13,6 +14,41 @@ let userAuth = null;
 const defaultDataPath = path.join(app.getPath('userData'), 'instances');
 const authFile = path.join(app.getPath('userData'), 'auth.json');
 const settingsFile = path.join(app.getPath('userData'), 'settings.json');
+const DEFAULT_APP_SETTINGS = {
+  theme: 'dark',
+  autoCheckUpdates: true,
+  launchMode: 'microsoft',
+  offlineUsername: 'Player',
+  offlineSkinMode: 'none',
+  offlineSkinValue: ''
+};
+const APP_THEMES = ['dark', 'midnight', 'light'];
+const CUSTOM_SKINLOADER_PROJECT_ID = 'idMHQ4n2';
+const OFFLINE_SKIN_PROFILE_NAME = 'Akari Launcher Offline Skin';
+
+function isValidOfflineUsername(username) {
+  return typeof username === 'string' && /^[A-Za-z0-9_]{3,16}$/.test(username);
+}
+
+function isValidHttpsImageUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && Boolean(url.hostname) &&
+      !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+function isValidOfflineSkinSettings(mode, value) {
+  if (!['none', 'url', 'mojang'].includes(mode) ||
+      typeof value !== 'string' || value.length > 2048) return false;
+  if (mode === 'none') return true;
+  return mode === 'url'
+    ? isValidHttpsImageUrl(value)
+    : isValidOfflineUsername(value);
+}
 
 const appIconPath = path.resolve(__dirname, 'icon', 'akari-launcher.png');
 
@@ -27,10 +63,12 @@ app.whenReady().then(async () => {
   await fs.ensureDir(instancesDir);
   createWindow();
 
-  // Automatically check for updates on startup
-  autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-    console.error("Update check failed:", err);
-  });
+  const settings = await readAppSettings();
+  if (settings.autoCheckUpdates) {
+    autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+      console.error("Update check failed:", err);
+    });
+  }
 });
 
 const DEFAULT_VERSIONS = [
@@ -52,6 +90,50 @@ async function getInstancesDir() {
   }
   await fs.ensureDir(defaultDataPath);
   return defaultDataPath;
+}
+
+async function readAppSettings() {
+  try {
+    if (await fs.pathExists(settingsFile)) {
+      const settings = await fs.readJson(settingsFile);
+      if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+        throw new Error('Settings file must contain a JSON object');
+      }
+      return {
+        theme: APP_THEMES.includes(settings.theme) ? settings.theme : DEFAULT_APP_SETTINGS.theme,
+        autoCheckUpdates: typeof settings.autoCheckUpdates === 'boolean'
+          ? settings.autoCheckUpdates
+          : DEFAULT_APP_SETTINGS.autoCheckUpdates,
+        launchMode: settings.launchMode === 'offline' ? 'offline' : 'microsoft',
+        offlineUsername: isValidOfflineUsername(settings.offlineUsername)
+          ? settings.offlineUsername
+          : DEFAULT_APP_SETTINGS.offlineUsername,
+        offlineSkinMode: isValidOfflineSkinSettings(settings.offlineSkinMode, settings.offlineSkinValue)
+          ? settings.offlineSkinMode
+          : DEFAULT_APP_SETTINGS.offlineSkinMode,
+        offlineSkinValue: isValidOfflineSkinSettings(settings.offlineSkinMode, settings.offlineSkinValue)
+          ? settings.offlineSkinValue
+          : DEFAULT_APP_SETTINGS.offlineSkinValue
+      };
+    }
+  } catch (error) {
+    console.error('Failed to read app settings:', error);
+    return { ...DEFAULT_APP_SETTINGS };
+  }
+  return { ...DEFAULT_APP_SETTINGS };
+}
+
+function normalizeMemorySettings(memory = {}) {
+  if (!memory || typeof memory !== 'object' || Array.isArray(memory)) {
+    throw new Error('Invalid instance memory settings');
+  }
+  const min = memory.min === undefined ? 2 : Number(memory.min);
+  const max = memory.max === undefined ? 4 : Number(memory.max);
+  if (!Number.isInteger(min) || !Number.isInteger(max) ||
+      min < 1 || max > 32 || min > max) {
+    throw new Error('Memory must be whole numbers between 1 and 32 GB, with minimum not greater than maximum');
+  }
+  return { min, max };
 }
 
 function parseInstanceName(input) {
@@ -133,6 +215,44 @@ function createLogsWindow() {
 }
 
 // --- SETTINGS / FOLDER IPC HANDLERS ---
+
+ipcMain.handle('get-app-settings', async () => {
+  return await readAppSettings();
+});
+
+ipcMain.handle('save-app-settings', async (event, preferences) => {
+  if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)) {
+    throw new Error('Invalid app settings');
+  }
+  if (!APP_THEMES.includes(preferences.theme) ||
+      typeof preferences.autoCheckUpdates !== 'boolean' ||
+      !['microsoft', 'offline'].includes(preferences.launchMode) ||
+      !isValidOfflineUsername(preferences.offlineUsername) ||
+      !isValidOfflineSkinSettings(preferences.offlineSkinMode, preferences.offlineSkinValue)) {
+    throw new Error('Invalid app settings');
+  }
+
+  const storedSettings = await fs.pathExists(settingsFile)
+    ? await fs.readJson(settingsFile)
+    : {};
+  await fs.writeJson(settingsFile, {
+    ...storedSettings,
+    theme: preferences.theme,
+    autoCheckUpdates: preferences.autoCheckUpdates,
+    launchMode: preferences.launchMode,
+    offlineUsername: preferences.offlineUsername,
+    offlineSkinMode: preferences.offlineSkinMode,
+    offlineSkinValue: preferences.offlineSkinValue
+  });
+  return {
+    theme: preferences.theme,
+    autoCheckUpdates: preferences.autoCheckUpdates,
+    launchMode: preferences.launchMode,
+    offlineUsername: preferences.offlineUsername,
+    offlineSkinMode: preferences.offlineSkinMode,
+    offlineSkinValue: preferences.offlineSkinValue
+  };
+});
 
 ipcMain.handle('get-download-location', async () => {
   return await getInstancesDir();
@@ -244,6 +364,20 @@ ipcMain.handle('get-neoforge-versions', async (event, mcVersion) => {
   }
 });
 
+ipcMain.handle('get-fabric-versions', async (event, mcVersion) => {
+  try {
+    const response = await axios.get(`https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(mcVersion)}`, {
+      headers: { 'User-Agent': 'AkariLauncher/1.0.0' }
+    });
+    return (response.data || [])
+      .map(item => item.loader && item.loader.version)
+      .filter(version => typeof version === 'string');
+  } catch (error) {
+    console.error('Failed to fetch Fabric loader versions:', error.message);
+    throw error;
+  }
+});
+
 ipcMain.handle('get-instances', async () => {
   const instancesDir = await getInstancesDir();
   await fs.ensureDir(instancesDir);
@@ -257,6 +391,7 @@ ipcMain.handle('create-instance', async (event, payload) => {
   const version = (typeof payload === 'object' && payload.version) ? payload.version : '1.20.1';
   const loader = (typeof payload === 'object' && payload.loader) ? payload.loader : 'vanilla';
   const neoforgeVersion = (typeof payload === 'object' && payload.neoforgeVersion) ? payload.neoforgeVersion : null;
+  const memory = normalizeMemorySettings(payload && payload.memory);
 
   const modsPath = path.join(instancePath, 'mods');
   const resourcepacksPath = path.join(instancePath, 'resourcepacks');
@@ -267,7 +402,13 @@ ipcMain.handle('create-instance', async (event, payload) => {
   await fs.ensureDir(resourcepacksPath);
   await fs.ensureDir(shaderpacksPath);
 
-  await fs.writeJson(configFile, { version, loader, neoforgeVersion });
+  await fs.writeJson(configFile, {
+    version,
+    loader,
+    neoforgeVersion,
+    loaderVersion: loader === 'fabric' ? payload.loaderVersion || null : null,
+    memory
+  });
   return true;
 });
 
@@ -295,6 +436,255 @@ ipcMain.handle('get-instance-info', async (event, instanceName) => {
   return { version: '1.20.1', loader: 'vanilla' };
 });
 
+ipcMain.handle('save-instance-settings', async (event, payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('Invalid instance settings');
+  }
+
+  const instancesDir = await getInstancesDir();
+  const { instancePath } = resolveInstancePath(instancesDir, payload.instanceName);
+  const configFile = path.join(instancePath, 'config.json');
+  let config = {};
+  if (await fs.pathExists(configFile)) {
+    config = await fs.readJson(configFile);
+  }
+
+  const memory = normalizeMemorySettings(payload.memory);
+  if (payload.loaderVersion !== undefined &&
+      (typeof payload.loaderVersion !== 'string' || payload.loaderVersion.length > 64)) {
+    throw new Error('Invalid Fabric loader version');
+  }
+  await fs.writeJson(configFile, {
+    ...config,
+    version: config.version || '1.20.1',
+    loader: config.loader || 'vanilla',
+    memory,
+    ...(payload.loaderVersion !== undefined ? { loaderVersion: payload.loaderVersion } : {})
+  });
+  return { memory, loaderVersion: config.loader === 'fabric' ? payload.loaderVersion || null : null };
+});
+
+ipcMain.handle('set-mod-enabled', async (event, payload) => {
+  const { instanceName, filename, enabled } = payload || {};
+  if (typeof filename !== 'string' || path.basename(filename) !== filename ||
+      !/^[^<>:"/\\|?*\x00-\x1f]+\.(jar|zip)$/i.test(filename) ||
+      typeof enabled !== 'boolean') {
+    throw new Error('Invalid mod toggle request');
+  }
+  const instancesDir = await getInstancesDir();
+  const { instancePath } = resolveInstancePath(instancesDir, instanceName);
+  const modsPath = path.join(instancePath, 'mods');
+  const disabledPath = path.join(instancePath, 'disabled-mods');
+  await fs.ensureDir(modsPath);
+  await fs.ensureDir(disabledPath);
+
+  const source = path.join(enabled ? disabledPath : modsPath, filename);
+  const destination = path.join(enabled ? modsPath : disabledPath, filename);
+  if (!await fs.pathExists(source)) {
+    throw new Error('Mod file not found');
+  }
+  if (await fs.pathExists(destination)) {
+    throw new Error(`A mod named "${filename}" already exists in the ${enabled ? 'enabled' : 'disabled'} mods folder`);
+  }
+  await fs.move(source, destination);
+  return { filename, enabled };
+});
+
+ipcMain.handle('migrate-instance-version', async (event, payload) => {
+  if (!payload || typeof payload !== 'object' ||
+      typeof payload.instanceName !== 'string' ||
+      typeof payload.version !== 'string' ||
+      !/^\d+\.\d+(?:\.\d+)?$/.test(payload.version)) {
+    throw new Error('Invalid Minecraft version migration request');
+  }
+
+  const instancesDir = await getInstancesDir();
+  const { instancePath } = resolveInstancePath(instancesDir, payload.instanceName);
+  const configPath = path.join(instancePath, 'config.json');
+  const metadataPath = path.join(instancePath, 'mods-metadata.json');
+  const modsPath = path.join(instancePath, 'mods');
+  const disabledPath = path.join(instancePath, 'disabled-mods');
+  const config = await fs.pathExists(configPath) ? await fs.readJson(configPath) : {};
+  const loader = String(config.loader || 'vanilla').toLowerCase();
+  const targetVersion = payload.version;
+
+  let loaderVersion = config.loaderVersion || null;
+  if (loader === 'fabric') {
+    const response = await axios.get(`https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(targetVersion)}`, {
+      headers: { 'User-Agent': 'AkariLauncher/1.0.0' }
+    });
+    loaderVersion = response.data && response.data[0] && response.data[0].loader
+      ? response.data[0].loader.version
+      : null;
+    if (!loaderVersion) {
+      throw new Error(`No Fabric loader build is available for Minecraft ${targetVersion}`);
+    }
+  }
+
+  await fs.ensureDir(modsPath);
+  await fs.ensureDir(disabledPath);
+  const metadataExisted = await fs.pathExists(metadataPath);
+  const metadata = metadataExisted ? await fs.readJson(metadataPath) : {};
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new Error('Invalid mods metadata file');
+  }
+
+  const activeFiles = (await fs.readdir(modsPath)).filter(filename => /\.(jar|zip)$/i.test(filename));
+  const disabledFiles = (await fs.readdir(disabledPath))
+    .filter(filename => /\.(jar|zip)$/i.test(filename))
+    .filter(filename => !activeFiles.includes(filename));
+  const candidates = [
+    ...activeFiles.map(filename => ({ filename, enabled: true })),
+    ...disabledFiles.map(filename => ({ filename, enabled: false }))
+  ];
+  const stagePath = await fs.mkdtemp(path.join(instancePath, '.akari-migration-'));
+  const plans = [];
+  const backups = [];
+  const installedFiles = [];
+  const configExisted = await fs.pathExists(configPath);
+  const originalConfig = { ...config };
+  const originalMetadata = { ...metadata };
+
+  try {
+    for (const candidate of candidates) {
+      const info = metadata[candidate.filename] || {};
+      let compatibleRelease = null;
+      if (typeof info.projectId === 'string' && info.projectId) {
+        const params = { game_versions: JSON.stringify([targetVersion]) };
+        if (loader !== 'vanilla') params.loaders = JSON.stringify([loader]);
+        const response = await axios.get(
+          `https://api.modrinth.com/v2/project/${encodeURIComponent(info.projectId)}/version`,
+          { params, headers: { 'User-Agent': 'AkariLauncher/1.0.0' } }
+        );
+        compatibleRelease = (response.data || []).find(release =>
+          Array.isArray(release.game_versions) &&
+          release.game_versions.includes(targetVersion) &&
+          (loader === 'vanilla' || (Array.isArray(release.loaders) && release.loaders.includes(loader)))
+        ) || null;
+      }
+
+      let stagedFile = null;
+      let nextFilename = candidate.filename;
+      if (compatibleRelease && Array.isArray(compatibleRelease.files) && compatibleRelease.files.length) {
+        const file = compatibleRelease.files.find(item => item && item.primary) || compatibleRelease.files[0];
+        if (file && typeof file.filename === 'string' &&
+            path.basename(file.filename) === file.filename &&
+            /^[^<>:"/\\|?*\x00-\x1f]+\.(jar|zip)$/i.test(file.filename) &&
+            typeof file.url === 'string') {
+          const download = await axios.get(file.url, { responseType: 'arraybuffer' });
+          stagedFile = path.join(stagePath, `${plans.length}.jar`);
+          await fs.writeFile(stagedFile, Buffer.from(download.data));
+          nextFilename = file.filename;
+        } else {
+          compatibleRelease = null;
+        }
+      } else {
+        compatibleRelease = null;
+      }
+
+      const enabled = Boolean(compatibleRelease) && candidate.enabled;
+      plans.push({
+        ...candidate,
+        info,
+        compatibleRelease,
+        stagedFile,
+        nextFilename,
+        nextEnabled: enabled
+      });
+    }
+
+    const finalPaths = new Set();
+    const metadataNames = new Set();
+    for (const plan of plans) {
+      const folder = plan.nextEnabled ? modsPath : disabledPath;
+      const finalPath = path.join(folder, plan.nextFilename);
+      if (finalPaths.has(finalPath)) {
+        throw new Error(`Multiple mods would use the filename "${plan.nextFilename}" after migration`);
+      }
+      if (metadataNames.has(plan.nextFilename)) {
+        throw new Error(`Multiple mods would share metadata for "${plan.nextFilename}" after migration`);
+      }
+      finalPaths.add(finalPath);
+      metadataNames.add(plan.nextFilename);
+      plan.sourcePath = path.join(plan.enabled ? modsPath : disabledPath, plan.filename);
+      plan.finalPath = finalPath;
+    }
+
+    for (let index = 0; index < plans.length; index += 1) {
+      const plan = plans[index];
+      const needsUpdate = Boolean(plan.compatibleRelease);
+      const needsDisable = !plan.compatibleRelease && plan.enabled;
+      if (!needsUpdate && !needsDisable) continue;
+      const backupPath = path.join(stagePath, `backup-${index}.jar`);
+      await fs.move(plan.sourcePath, backupPath);
+      backups.push({ sourcePath: plan.sourcePath, backupPath, finalPath: plan.finalPath });
+    }
+
+    for (const plan of plans) {
+      if (plan.compatibleRelease) {
+        await fs.move(plan.stagedFile, plan.finalPath);
+        installedFiles.push(plan.finalPath);
+      } else if (plan.enabled) {
+        await fs.copy(path.join(stagePath, `backup-${plans.indexOf(plan)}.jar`), plan.finalPath);
+        installedFiles.push(plan.finalPath);
+      }
+    }
+
+    const updated = [];
+    const disabled = [];
+    for (const plan of plans) {
+      if (plan.compatibleRelease) delete metadata[plan.filename];
+    }
+    for (const plan of plans) {
+      if (plan.compatibleRelease) {
+        metadata[plan.nextFilename] = {
+          ...plan.info,
+          title: plan.info.title || plan.nextFilename.replace(/\.jar$/i, ''),
+          projectId: plan.info.projectId,
+          projectVersionId: plan.compatibleRelease.id || null,
+          versionNumber: plan.compatibleRelease.version_number || '',
+          changelog: plan.compatibleRelease.changelog || ''
+        };
+        updated.push(plan.info.title || plan.filename);
+      }
+      if (!plan.nextEnabled) {
+        disabled.push(plan.info.title || plan.filename);
+      }
+    }
+
+    if (metadataExisted || updated.length) await fs.writeJson(metadataPath, metadata);
+    await fs.writeJson(configPath, {
+      ...config,
+      version: targetVersion,
+      loader,
+      ...(loader === 'fabric' ? { loaderVersion } : {})
+    });
+
+    return { version: targetVersion, loaderVersion, updated, disabled };
+  } catch (error) {
+    for (const filePath of installedFiles.reverse()) {
+      await fs.remove(filePath);
+    }
+    for (const backup of backups.reverse()) {
+      if (await fs.pathExists(backup.backupPath)) {
+        await fs.move(backup.backupPath, backup.sourcePath, { overwrite: true });
+      }
+    }
+    if (metadataExisted) {
+      await fs.writeJson(metadataPath, originalMetadata);
+    } else {
+      await fs.remove(metadataPath);
+    }
+    if (configExisted) {
+      await fs.writeJson(configPath, originalConfig);
+    } else {
+      await fs.remove(configPath);
+    }
+    throw error;
+  } finally {
+    await fs.remove(stagePath);
+  }
+});
 async function loadFolderAddons(instanceName, subFolder, metaFileName) {
   const instancesDir = await getInstancesDir();
   const { instancePath } = resolveInstancePath(instancesDir, instanceName);
@@ -302,8 +692,16 @@ async function loadFolderAddons(instanceName, subFolder, metaFileName) {
   const metadataPath = path.join(instancePath, metaFileName);
   await fs.ensureDir(targetDir);
 
-  const files = await fs.readdir(targetDir);
-  const validFiles = files.filter(f => f.endsWith('.jar') || f.endsWith('.zip'));
+  const activeFiles = (await fs.readdir(targetDir)).filter(f => /\.(jar|zip)$/i.test(f));
+  let entries = activeFiles.map(filename => ({ filename, enabled: true }));
+  if (subFolder === 'mods') {
+    const disabledDir = path.join(instancePath, 'disabled-mods');
+    await fs.ensureDir(disabledDir);
+    const disabledFiles = (await fs.readdir(disabledDir))
+      .filter(f => /\.(jar|zip)$/i.test(f))
+      .filter(filename => !activeFiles.includes(filename));
+    entries = entries.concat(disabledFiles.map(filename => ({ filename, enabled: false })));
+  }
 
   let metadata = {};
   if (await fs.pathExists(metadataPath)) {
@@ -312,12 +710,14 @@ async function loadFolderAddons(instanceName, subFolder, metaFileName) {
 
   const defaultIcon = 'https://raw.githubusercontent.com/modrinth/knights-canvas/main/static/assets/logo.png';
 
-  return validFiles.map(filename => {
+  return entries.map(({ filename, enabled }) => {
     const info = metadata[filename] || {};
     return {
       filename,
+      enabled,
       title: info.title || filename.replace(/\.(jar|zip)$/, ''),
       versionNumber: info.versionNumber || '',
+      projectId: info.projectId || null,
       changelog: info.changelog || 'No changelog recorded.',
       iconUrl: (info.iconUrl && info.iconUrl.startsWith('http')) ? info.iconUrl : defaultIcon,
       description: info.description || filename
@@ -355,8 +755,11 @@ ipcMain.handle('delete-addon', async (event, { instanceName, filename, type }) =
     metaFile = 'shaders-metadata.json';
   }
 
-  const itemPath = path.join(instancePath, folder, filename);
+  let itemPath = path.join(instancePath, folder, filename);
   const metadataPath = path.join(instancePath, metaFile);
+  if (type === 'mod' && !await fs.pathExists(itemPath)) {
+    itemPath = path.join(instancePath, 'disabled-mods', filename);
+  }
 
   await fs.remove(itemPath);
 
@@ -522,6 +925,8 @@ async function downloadProjectWithDependencies(projectIdOrSlug, instanceName, pr
     metadata[primaryFile.filename] = {
       title: project.title || primaryFile.filename,
       versionNumber: selectedVersion.version_number || '',
+      projectId: project.id,
+      projectVersionId: selectedVersion.id || null,
       changelog: selectedVersion.changelog || 'No changelog provided.',
       iconUrl: project.icon_url || 'https://raw.githubusercontent.com/modrinth/knights-canvas/main/static/assets/logo.png',
       description: project.description || ''
@@ -583,13 +988,245 @@ ipcMain.handle('download-addon', async (event, payload) => {
   }
 });
 
+async function resolveOfflineSkinUrl(mode, value) {
+  if (mode === 'url') return value;
+  if (mode !== 'mojang' || !isValidOfflineUsername(value)) {
+    throw new Error('Choose a valid HTTPS skin URL or Mojang username.');
+  }
+
+  const profileResponse = await axios.get(
+    `https://api.mojang.com/users/profiles/minecraft/${encodeURIComponent(value)}`,
+    { timeout: 15000, headers: { 'User-Agent': 'AkariLauncher/1.0.0' } }
+  );
+  if (!profileResponse.data || !/^[a-f0-9]{32}$/i.test(profileResponse.data.id || '')) {
+    throw new Error(`Could not find the Mojang profile "${value}".`);
+  }
+
+  const sessionResponse = await axios.get(
+    `https://sessionserver.mojang.com/session/minecraft/profile/${profileResponse.data.id}?unsigned=false`,
+    { timeout: 15000, headers: { 'User-Agent': 'AkariLauncher/1.0.0' } }
+  );
+  const textureProperty = (sessionResponse.data && sessionResponse.data.properties || [])
+    .find(property => property && property.name === 'textures' && typeof property.value === 'string');
+  if (!textureProperty) throw new Error(`No skin is set for Mojang profile "${value}".`);
+
+  let textureData;
+  try {
+    textureData = JSON.parse(Buffer.from(textureProperty.value, 'base64').toString('utf8'));
+  } catch {
+    throw new Error('Mojang returned invalid skin profile data.');
+  }
+  const skinUrl = textureData && textureData.textures && textureData.textures.SKIN &&
+    textureData.textures.SKIN.url;
+  let parsedSkinUrl;
+  try {
+    parsedSkinUrl = new URL(skinUrl);
+  } catch {
+    throw new Error(`No skin is set for Mojang profile "${value}".`);
+  }
+  if (parsedSkinUrl.protocol !== 'https:' || parsedSkinUrl.hostname !== 'textures.minecraft.net') {
+    throw new Error('Mojang returned an unexpected skin URL.');
+  }
+  return parsedSkinUrl.toString();
+}
+
+async function installCustomSkinLoader(instancePath, minecraftVersion, loader) {
+  const supportedLoaders = ['fabric', 'forge', 'neoforge'];
+  if (!supportedLoaders.includes(loader)) {
+    throw new Error('Custom offline skins require a Fabric, Forge, or NeoForge instance. Vanilla instances are not supported.');
+  }
+
+  const response = await axios.get(
+    `https://api.modrinth.com/v2/project/${CUSTOM_SKINLOADER_PROJECT_ID}/version`,
+    {
+      params: {
+        game_versions: JSON.stringify([minecraftVersion]),
+        loaders: JSON.stringify([loader])
+      },
+      timeout: 20000,
+      headers: { 'User-Agent': 'AkariLauncher/1.0.0' }
+    }
+  );
+  const release = (response.data || []).find(item =>
+    item && Array.isArray(item.game_versions) &&
+    item.game_versions.includes(minecraftVersion) &&
+    Array.isArray(item.loaders) && item.loaders.includes(loader) &&
+    typeof item.id === 'string' && /^[A-Za-z0-9]+$/.test(item.id)
+  );
+  const file = release && Array.isArray(release.files)
+    ? release.files.find(candidate => candidate && candidate.primary) || release.files[0]
+    : null;
+  let modUrl;
+  try {
+    modUrl = new URL(file && file.url);
+  } catch {
+    throw new Error(`CustomSkinLoader has no compatible release for Minecraft ${minecraftVersion} (${loader}).`);
+  }
+  if (modUrl.protocol !== 'https:' || modUrl.hostname !== 'cdn.modrinth.com' ||
+      typeof file.filename !== 'string' || !/^[^<>:"/\\|?*\x00-\x1f]+\.jar$/i.test(file.filename) ||
+      !file.hashes || !/^[a-f0-9]{128}$/i.test(file.hashes.sha512 || '')) {
+    throw new Error('Modrinth returned an invalid CustomSkinLoader download.');
+  }
+
+  const instancesDir = await getInstancesDir();
+  const { instancePath: safeInstancePath } = resolveInstancePath(instancesDir, path.basename(instancePath));
+  if (safeInstancePath !== path.resolve(instancePath)) {
+    throw new Error('Invalid instance path for CustomSkinLoader installation.');
+  }
+  const modsPath = path.join(instancePath, 'mods');
+  const disabledModsPath = path.join(instancePath, 'disabled-mods');
+  const metadataPath = path.join(instancePath, 'mods-metadata.json');
+  await fs.ensureDir(modsPath);
+  const metadata = await fs.pathExists(metadataPath) ? await fs.readJson(metadataPath) : {};
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new Error('Invalid mods metadata file');
+  }
+
+  const filename = `akari-customskinloader-${release.id}.jar`;
+  const targetPath = path.join(modsPath, filename);
+  const disabledTargetPath = path.join(disabledModsPath, filename);
+  const existingInfo = metadata[filename];
+  let installedNewFile = false;
+  let movedFromDisabled = false;
+  if (await fs.pathExists(targetPath)) {
+    if (!existingInfo || existingInfo.managedBy !== 'akari-offline-skin') {
+      throw new Error(`Cannot install CustomSkinLoader because "${filename}" already exists and is not managed by Akari.`);
+    }
+  } else if (await fs.pathExists(disabledTargetPath)) {
+    if (!existingInfo || existingInfo.managedBy !== 'akari-offline-skin') {
+      throw new Error(`Cannot install CustomSkinLoader because "${filename}" exists in disabled mods and is not managed by Akari.`);
+    }
+    await fs.ensureDir(modsPath);
+    await fs.move(disabledTargetPath, targetPath);
+    installedNewFile = true;
+    movedFromDisabled = true;
+  } else {
+    const download = await axios.get(file.url, {
+      responseType: 'arraybuffer',
+      timeout: 30000,
+      maxContentLength: 20 * 1024 * 1024,
+      headers: { 'User-Agent': 'AkariLauncher/1.0.0' }
+    });
+    const bytes = Buffer.from(download.data);
+    if (bytes.length !== file.size ||
+        crypto.createHash('sha512').update(bytes).digest('hex').toLowerCase() !== file.hashes.sha512.toLowerCase()) {
+      throw new Error('CustomSkinLoader download failed its integrity check.');
+    }
+    const stagingPath = await fs.mkdtemp(path.join(instancePath, '.akari-skin-'));
+    try {
+      const stagedFile = path.join(stagingPath, filename);
+      await fs.writeFile(stagedFile, bytes, { flag: 'wx' });
+      await fs.move(stagedFile, targetPath);
+      installedNewFile = true;
+    } finally {
+      await fs.remove(stagingPath);
+    }
+  }
+
+  const nextMetadata = { ...metadata };
+  for (const [oldFilename, info] of Object.entries(nextMetadata)) {
+    if (oldFilename !== filename && info && info.managedBy === 'akari-offline-skin') {
+      await fs.remove(path.join(modsPath, oldFilename));
+      await fs.remove(path.join(disabledModsPath, oldFilename));
+      delete nextMetadata[oldFilename];
+    }
+  }
+  nextMetadata[filename] = {
+    title: 'CustomSkinLoader (Akari offline skin support)',
+    projectId: CUSTOM_SKINLOADER_PROJECT_ID,
+    projectVersionId: release.id,
+    versionNumber: release.version_number || '',
+    description: 'Installed by Akari Launcher for custom offline skins.',
+    managedBy: 'akari-offline-skin'
+  };
+  try {
+    await fs.writeJson(metadataPath, nextMetadata);
+  } catch (error) {
+    if (movedFromDisabled) {
+      await fs.ensureDir(disabledModsPath);
+      await fs.move(targetPath, disabledTargetPath);
+    } else if (installedNewFile) {
+      await fs.remove(targetPath);
+    }
+    throw error;
+  }
+}
+
+async function updateCustomSkinLoaderProfile(instancePath, skinUrl) {
+  const dataPath = path.join(instancePath, 'CustomSkinLoader');
+  const configPath = path.join(dataPath, 'CustomSkinLoader.json');
+  const extraListPath = path.join(dataPath, 'ExtraList', 'AkariLauncherOfflineSkin.json');
+  const isEnabled = Boolean(skinUrl);
+  const profile = {
+    name: OFFLINE_SKIN_PROFILE_NAME,
+    type: 'Legacy',
+    skin: skinUrl || '',
+    model: 'auto',
+    checkPNG: false
+  };
+
+  if (await fs.pathExists(configPath)) {
+    let config;
+    try {
+      config = await fs.readJson(configPath);
+    } catch (error) {
+      if (isEnabled) throw new Error(`Could not read CustomSkinLoader config: ${error.message}`);
+      console.warn('Could not read CustomSkinLoader config while clearing Akari skin settings:', error.message);
+      await fs.remove(extraListPath);
+      return;
+    }
+    if (!config || typeof config !== 'object' || Array.isArray(config) ||
+        !Array.isArray(config.loadlist)) {
+      if (isEnabled) throw new Error('CustomSkinLoader has an invalid config file; it was left unchanged.');
+      console.warn('CustomSkinLoader has an invalid config file; leaving it unchanged.');
+      await fs.remove(extraListPath);
+      return;
+    }
+    const existingIndex = config.loadlist.findIndex(item =>
+      item && item.name === OFFLINE_SKIN_PROFILE_NAME
+    );
+    let changed = false;
+    if (isEnabled) {
+      if (existingIndex >= 0) {
+        const updatedProfile = { ...config.loadlist[existingIndex], ...profile };
+        changed = JSON.stringify(updatedProfile) !== JSON.stringify(config.loadlist[existingIndex]);
+        config.loadlist[existingIndex] = updatedProfile;
+      } else {
+        config.loadlist.unshift(profile);
+        changed = true;
+      }
+    } else if (existingIndex >= 0) {
+      config.loadlist = config.loadlist.filter(item =>
+        !item || item.name !== OFFLINE_SKIN_PROFILE_NAME
+      );
+      changed = true;
+    }
+    if (changed) await fs.writeJson(configPath, config);
+    await fs.remove(extraListPath);
+    return;
+  }
+
+  if (isEnabled) {
+    await fs.ensureDir(path.dirname(extraListPath));
+    await fs.writeJson(extraListPath, profile);
+  } else {
+    await fs.remove(extraListPath);
+  }
+}
+
 ipcMain.handle('launch-instance', async (event, instanceName) => {
   // Automatically open or focus game logs window on boot
   createLogsWindow();
 
-  if (!userAuth) {
+  const settings = await readAppSettings();
+  const offlineMode = settings.launchMode === 'offline';
+  if (!offlineMode && !userAuth) {
     sendLogToWindows("[ERROR] Please log in with Microsoft first!\n");
     return 'Please log in first!';
+  }
+  if (offlineMode && !isValidOfflineUsername(settings.offlineUsername)) {
+    sendLogToWindows('[ERROR] Set a valid offline username in Settings before launching.\n');
+    return 'Set a valid offline username in Settings before launching.';
   }
 
   const instancesDir = await getInstancesDir();
@@ -599,31 +1236,54 @@ ipcMain.handle('launch-instance', async (event, instanceName) => {
   let version = '1.20.1';
   let loader = 'vanilla';
   let savedNeoVersion = null;
+  let savedLoaderVersion = null;
+  let memory = normalizeMemorySettings();
 
   if (await fs.pathExists(configFile)) {
     const config = await fs.readJson(configFile);
     version = config.version || version;
     loader = config.loader || loader;
     savedNeoVersion = config.neoforgeVersion || null;
+    savedLoaderVersion = config.loaderVersion || null;
+    memory = normalizeMemorySettings(config.memory);
   }
 
   const selectedLoader = loader.toLowerCase();
+  try {
+    let offlineSkinUrl = null;
+    if (offlineMode && settings.offlineSkinMode !== 'none') {
+      offlineSkinUrl = await resolveOfflineSkinUrl(settings.offlineSkinMode, settings.offlineSkinValue);
+      await installCustomSkinLoader(instanceRoot, version, selectedLoader);
+    }
+    await updateCustomSkinLoaderProfile(instanceRoot, offlineSkinUrl);
+    if (offlineSkinUrl) {
+      sendLogToWindows('[INFO] Custom offline skin configured for this instance.\n');
+    }
+  } catch (error) {
+    sendLogToWindows(`[ERROR] Offline skin setup failed: ${error.message}\n`);
+    return `Offline skin setup failed: ${error.message}`;
+  }
+
   sendLogToWindows(`\n=== Starting Launch Sequence for ${name} (${version} - ${selectedLoader.toUpperCase()}) ===\n`);
 
   const launcher = new Client();
 
   const opts = {
-    authorization: userAuth,
+    authorization: offlineMode ? Authenticator.getAuth(settings.offlineUsername) : userAuth,
     root: instanceRoot,
     version: {
       number: version,
       type: 'release'
     },
     memory: {
-      max: '4G',
-      min: '2G'
+      max: `${memory.max}G`,
+      min: `${memory.min}G`
     }
   };
+
+  sendLogToWindows(offlineMode
+    ? `[INFO] Launching in offline mode as ${settings.offlineUsername}. Online-mode servers require Microsoft authentication.\n`
+    : '[INFO] Launching with Microsoft authentication.\n');
 
   if (selectedLoader === 'fabric') {
     try {
@@ -637,7 +1297,7 @@ ipcMain.handle('launch-instance', async (event, instanceName) => {
         throw new Error(`No Fabric loader available for Minecraft ${version}`);
       }
 
-      const loaderVersion = loaderRes.data[0].loader.version;
+      const loaderVersion = savedLoaderVersion || loaderRes.data[0].loader.version;
 
       const profileRes = await axios.get(
         `https://meta.fabricmc.net/v2/versions/loader/${version}/${loaderVersion}/profile/json`,

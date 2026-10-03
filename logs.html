@@ -9,25 +9,129 @@
       box-sizing: border-box;
     }
 
+    :root {
+      color-scheme: dark;
+      --page: #111116;
+      --surface: #1b1b23;
+      --border: rgba(255, 255, 255, 0.09);
+      --text: #f1edf3;
+      --muted: #a5a1ad;
+      --accent: #ff77a4;
+    }
+
     body {
       margin: 0;
-      padding: 14px;
-      background-color: #0d0d0f;
-      color: #10b981;
+      padding: 92px 24px 22px;
+      background:
+        radial-gradient(ellipse at 90% 0%, rgba(105, 52, 87, 0.13), transparent 38%),
+        var(--page);
+      color: #c3f1df;
       font-family: 'Consolas', 'Cascadia Code', 'Courier New', monospace;
-      font-size: 12px;
-      line-height: 1.5;
+      font-size: 12.5px;
+      line-height: 1.65;
       overflow-y: auto;
-      height: 100vh;
+      min-height: 100vh;
+      scrollbar-color: #41404b transparent;
+      scrollbar-width: thin;
+    }
+
+    .logs-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 0;
+      padding: 18px 24px;
+      background: rgba(21, 21, 28, 0.94);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+    }
+
+    .logs-brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      min-width: 0;
+    }
+
+    .logs-brand img {
+      width: 34px;
+      height: 34px;
+      object-fit: contain;
+      filter: drop-shadow(0 3px 10px rgba(255, 95, 150, 0.22));
+    }
+
+    .logs-title {
+      margin: 0;
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+
+    .logs-subtitle {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 11px;
+    }
+
+    .logs-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 10px;
+      border: 1px solid rgba(255, 119, 164, 0.2);
+      border-radius: 999px;
+      background: rgba(255, 119, 164, 0.08);
+      color: #ffc1d5;
+      font: 600 10px system-ui, -apple-system, sans-serif;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+
+    .logs-status::before {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 9px rgba(255, 119, 164, 0.8);
+      content: "";
     }
 
     #logs-container {
+      min-height: calc(100vh - 114px);
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      background: linear-gradient(145deg, rgba(27, 27, 35, 0.97), rgba(21, 21, 28, 0.97));
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.18);
       white-space: pre-wrap;
-      word-break: break-all;
+      overflow-wrap: anywhere;
+    }
+
+    ::selection {
+      background: rgba(255, 119, 164, 0.28);
     }
   </style>
 </head>
 <body>
+  <header class="logs-header">
+    <div class="logs-brand">
+      <img src="icon/akari-launcher.png" alt="">
+      <div>
+        <h1 class="logs-title">Game output</h1>
+        <p class="logs-subtitle">Live session stream</p>
+      </div>
+    </div>
+    <span class="logs-status">LISTENING</span>
+  </header>
   <div id="logs-container">Waiting for game execution...</div>
 
   <script>
