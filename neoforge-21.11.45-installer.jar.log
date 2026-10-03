@@ -1,0 +1,12 @@
+JVM info: Eclipse Adoptium - 21.0.12.1 - 21.0.12.1+1-LTS
+java.net.preferIPv4Stack=true
+Current Time: 03/10/2026 00:17:57
+Host: maven.neoforged.net [84.17.50.8, 89.187.167.41, 89.187.167.39, 84.17.50.23]
+Host: libraries.minecraft.net [150.171.109.215]
+Host: launchermeta.mojang.com [150.171.109.216]
+Host: piston-meta.mojang.com [150.171.109.216]
+Host: sessionserver.mojang.com [150.171.109.214]
+Found java version 21.0.12.1
+Target Directory: E:\Akari-Launcher-Instances\TBS
+There is no minecraft launcher profile in "E:\Akari-Launcher-Instances\TBS", you need to run the launcher first!
+There was an error during installation

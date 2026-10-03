@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Logs</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 14px;
+      background-color: #0d0d0f;
+      color: #10b981;
+      font-family: 'Consolas', 'Cascadia Code', 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      overflow-y: auto;
+      height: 100vh;
+    }
+
+    #logs-container {
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div id="logs-container">Waiting for game execution...</div>
+
+  <script>
+    const container = document.getElementById('logs-container');
+    let hasClearedPlaceholder = false;
+
+    if (window.api && window.api.onLogData) {
+      window.api.onLogData((data) => {
+        if (!hasClearedPlaceholder) {
+          container.innerText = '';
+          hasClearedPlaceholder = true;
+        }
+
+        container.innerText += data;
+        window.scrollTo(0, document.body.scrollHeight);
+      });
+    }
+  </script>
+</body>
+</html>

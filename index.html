@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Akari Launcher</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: #121214;
+      color: #ff51d3;
+      overflow: hidden;
+    }
+
+    .app-container {
+      display: flex;
+      height: 100vh;
+    }
+
+    .sidebar {
+      width: 220px;
+      background-color: #18181c;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .logo {
+      width: 32px;
+      height: 32px;
+    }
+
+    .nav-links {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .nav-btn {
+      background: none;
+      border: none;
+      color: #a1a1aa;
+      padding: 10px;
+      text-align: left;
+      cursor: pointer;
+      border-radius: 6px;
+      font-size: 15px;
+    }
+
+    .nav-btn.active, .nav-btn:hover {
+      background-color: #27272a;
+      color: #ffffff;
+    }
+
+    .user-profile {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 13px;
+      color: #a1a1aa;
+    }
+
+    .content {
+      flex: 1;
+      padding: 30px;
+      overflow-y: auto;
+      height: 100vh;
+    }
+
+    .view-panel {
+      display: none;
+    }
+
+    .view-panel.active {
+      display: block;
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .title-with-back {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .instances-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 20px;
+    }
+
+    .instance-card {
+      background-color: #202024;
+      border-radius: 8px;
+      padding: 16px;
+      cursor: pointer;
+      border: 1px solid #2e2e34;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+
+    .instance-card:hover {
+      transform: translateY(-2px);
+      border-color: #6366f1;
+    }
+
+    .instance-card-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .sub-nav {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #2e2e34;
+      padding-bottom: 10px;
+    }
+
+    .addon-tab {
+      background: none;
+      border: none;
+      color: #a1a1aa;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    .addon-tab.active {
+      color: #ffffff;
+      border-bottom: 2px solid #6366f1;
+    }
+
+    .addon-controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .addon-controls input {
+      flex: 1;
+      background-color: #18181c;
+      border: 1px solid #2e2e34;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+    }
+
+    /* Addon Card Styling */
+    .addon-card {
+      display: flex;
+      flex-direction: column;
+      background-color: #202024;
+      padding: 14px;
+      margin-bottom: 10px;
+      border-radius: 6px;
+      border: 1px solid #2e2e34;
+    }
+
+    .addon-main-row {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      width: 100%;
+    }
+
+    .addon-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 6px;
+      object-fit: cover;
+    }
+
+    .addon-details {
+      flex: 1;
+    }
+
+    .addon-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .addon-details h4 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .version-tag {
+      background-color: #27272a;
+      color: #a1a1aa;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      border: 1px solid #3f3f46;
+      font-weight: 500;
+    }
+
+    .addon-details p {
+      margin: 4px 0 0 0;
+      color: #a1a1aa;
+      font-size: 13px;
+    }
+
+    .addon-actions-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .version-select-dropdown {
+      background-color: #121214;
+      border: 1px solid #3f3f46;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      max-width: 210px;
+    }
+
+    .btn-changelog-toggle {
+      background: none;
+      border: 1px solid #3f3f46;
+      color: #a1a1aa;
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .btn-changelog-toggle:hover {
+      background-color: #27272a;
+      color: #ffffff;
+    }
+
+    .changelog-drawer {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #2e2e34;
+      font-size: 13px;
+      color: #d4d4d8;
+      line-height: 1.4;
+      background-color: #18181c;
+      padding: 12px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .changelog-drawer.hidden {
+      display: none;
+    }
+
+    .btn-primary {
+      background-color: #6366f1;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .btn-secondary {
+      background-color: #27272a;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .btn-delete, .btn-delete-addon {
+      background-color: #ef4444;
+      color: #fff;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .folder-picker {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .folder-picker input {
+      flex: 1;
+      background-color: #18181c;
+      border: 1px solid #2e2e34;
+      color: #fff;
+      padding: 8px;
+      border-radius: 6px;
+    }
+
+    /* Modal Overlay Styling */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal-overlay.hidden {
+      display: none;
+    }
+
+    .modal-card {
+      background-color: #18181c;
+      border: 1px solid #2e2e34;
+      border-radius: 8px;
+      padding: 24px;
+      width: 400px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .modal-card.large {
+      width: 750px;
+      max-height: 85vh;
+    }
+
+    .modal-card h2 {
+      margin: 0 0 10px 0;
+    }
+
+    .modal-results-list {
+      overflow-y: auto;
+      max-height: 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 13px;
+      color: #a1a1aa;
+    }
+
+    .form-group input, .form-group select {
+      background-color: #121214;
+      border: 1px solid #2e2e34;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+    }
+
+    .form-group.hidden {
+      display: none;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="icon/akari-launcher.png" alt="Logo" class="logo">
+        <h2>Akari</h2>
+      </div>
+      <nav class="nav-links">
+        <button id="nav-instances" class="nav-btn active">Instances</button>
+        <button id="nav-settings" class="nav-btn">Settings</button>
+      </nav>
+      <div class="user-profile">
+        <span id="user-display">Logged in as: Offline</span>
+        <button id="auth-btn" class="btn-secondary">Log In</button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="content">
+      <!-- VIEW 1: Instances Grid -->
+      <section id="view-instances" class="view-panel active">
+        <div class="header-bar">
+          <h1>Instances</h1>
+          <div class="header-actions">
+            <button id="btn-create-modal" class="btn-primary">+ Create Instance</button>
+          </div>
+        </div>
+        <div id="instances-grid" class="instances-grid"></div>
+      </section>
+
+      <!-- VIEW 2: Instance Details -->
+      <section id="view-instance-details" class="view-panel">
+        <div class="header-bar">
+          <div class="title-with-back">
+            <button id="btn-back-to-instances" class="btn-secondary">← Back</button>
+            <h1 id="selected-instance-title">Instance Name</h1>
+          </div>
+          <div class="header-actions">
+            <button id="btn-open-logs" class="btn-secondary">Logs</button>
+            <button id="btn-launch-selected" class="btn-primary">Play</button>
+          </div>
+        </div>
+
+        <div class="sub-nav">
+          <button class="addon-tab active" data-tab="mods">Mods</button>
+          <button class="addon-tab" data-tab="resourcepacks">Resource Packs</button>
+          <button class="addon-tab" data-tab="shaders">Shaders</button>
+        </div>
+
+        <div class="addon-controls">
+          <input type="text" id="addon-search-input" placeholder="Search installed mods...">
+          <button id="btn-search-installed" class="btn-primary">Search</button>
+          <button id="btn-add-addon" class="btn-primary">+ Add Mods</button>
+        </div>
+
+        <div id="addons-list" class="addons-list"></div>
+      </section>
+
+      <!-- VIEW 3: Settings -->
+      <section id="view-settings" class="view-panel">
+        <h1>Settings</h1>
+        <div class="settings-group">
+          <label>Instances Storage Folder:</label>
+          <div class="folder-picker">
+            <input type="text" id="input-download-path" readonly>
+            <button id="btn-change-folder" class="btn-secondary">Browse</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Create Instance Modal Overlay -->
+  <div id="create-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h2>Create New Instance</h2>
+      <div class="form-group">
+        <label for="create-name">Instance Name</label>
+        <input type="text" id="create-name" placeholder="My Modpack">
+      </div>
+      <div class="form-group">
+        <label for="create-version">Minecraft Version</label>
+        <select id="create-version"></select>
+      </div>
+      <div class="form-group">
+        <label for="create-loader">Mod Loader</label>
+        <select id="create-loader">
+          <option value="vanilla">Vanilla</option>
+          <option value="fabric">Fabric</option>
+          <option value="forge">Forge</option>
+          <option value="neoforge">NeoForge</option>
+        </select>
+      </div>
+      <div id="loader-version-group" class="form-group hidden">
+        <label id="loader-version-label" for="create-loader-version">Loader Build</label>
+        <select id="create-loader-version"></select>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-cancel-create" class="btn-secondary">Cancel</button>
+        <button id="btn-confirm-create" class="btn-primary">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Addons Modal Overlay -->
+  <div id="add-addon-modal" class="modal-overlay hidden">
+    <div class="modal-card large">
+      <h2 id="add-modal-title">Add Mods</h2>
+      <div class="addon-controls">
+        <input type="text" id="modrinth-search-input" placeholder="Search Modrinth...">
+        <button id="btn-search-modrinth" class="btn-primary">Search</button>
+      </div>
+      <div id="modrinth-search-results" class="modal-results-list"></div>
+      <div class="modal-actions">
+        <button id="btn-close-add-modal" class="btn-secondary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentInstance = null;
+    let currentAddonTab = 'mods';
+    let currentUser = null;
+    let installedAddonsCache = [];
+
+    // --- NAVIGATION ---
+    function showView(viewId) {
+      document.querySelectorAll('.view-panel').forEach(panel => panel.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+
+      const target = document.getElementById(viewId);
+      if (target) target.classList.add('active');
+
+      if (viewId === 'view-instances') {
+        document.getElementById('nav-instances').classList.add('active');
+      } else if (viewId === 'view-settings') {
+        document.getElementById('nav-settings').classList.add('active');
+      }
+    }
+
+    document.getElementById('nav-instances').addEventListener('click', () => showView('view-instances'));
+    document.getElementById('nav-settings').addEventListener('click', () => {
+      showView('view-settings');
+      loadSettings();
+    });
+    document.getElementById('btn-back-to-instances').addEventListener('click', () => showView('view-instances'));
+
+    // --- INSTANCE LAUNCH HANDLER ---
+    async function triggerInstanceLaunch(instanceName) {
+      if (!instanceName) return;
+      const playBtn = document.getElementById('btn-launch-selected');
+      const originalText = playBtn ? playBtn.innerText : 'Play';
+      
+      try {
+        if (playBtn) {
+          playBtn.innerText = 'Launching...';
+          playBtn.disabled = true;
+        }
+        await window.api.launchInstance(instanceName);
+      } catch (err) {
+        console.error('Failed to launch instance:', err);
+        alert(`Failed to launch instance "${instanceName}". Check the logs for details.`);
+      } finally {
+        if (playBtn) {
+          playBtn.innerText = originalText;
+          playBtn.disabled = false;
+        }
+      }
+    }
+
+    // --- INSTANCE LIST & CARDS ---
+    async function loadInstances() {
+      const container = document.getElementById('instances-grid');
+      container.innerHTML = '';
+      
+      const instanceNames = await window.api.getInstances();
+
+      for (const name of instanceNames) {
+        const info = await window.api.getInstanceInfo(name);
+        const card = document.createElement('div');
+        card.className = 'instance-card';
+
+        card.innerHTML = `
+          <div class="instance-card-header">
+            <h3>${name}</h3>
+            <p>${info.version || '1.20.1'} (${(info.loader || 'VANILLA').toUpperCase()})</p>
+          </div>
+          <div class="instance-card-actions">
+            <button class="btn-primary btn-play">Play</button>
+            <button class="btn-delete">Delete</button>
+          </div>
+        `;
+
+        card.addEventListener('click', () => {
+          openInstanceDetails(name);
+        });
+
+        const playBtn = card.querySelector('.btn-play');
+        playBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          triggerInstanceLaunch(name);
+        });
+
+        const deleteBtn = card.querySelector('.btn-delete');
+        deleteBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          if (confirm(`Are you sure you want to delete "${name}"?`)) {
+            await window.api.deleteInstance(name);
+            loadInstances();
+          }
+        });
+
+        container.appendChild(card);
+      }
+    }
+
+    // --- INSTANCE CREATION MODAL & LOADER BUILD FETCHING ---
+    const createModal = document.getElementById('create-modal');
+    const versionSelect = document.getElementById('create-version');
+    const loaderSelect = document.getElementById('create-loader');
+    const loaderGroup = document.getElementById('loader-version-group');
+    const loaderLabel = document.getElementById('loader-version-label');
+    const loaderVersionSelect = document.getElementById('create-loader-version');
+
+    document.getElementById('btn-create-modal').addEventListener('click', async () => {
+      createModal.classList.remove('hidden');
+      const mcVersions = await window.api.getMcVersions();
+      versionSelect.innerHTML = mcVersions.map(v => `<option value="${v}">${v}</option>`).join('');
+      await updateLoaderBuilds();
+    });
+
+    document.getElementById('btn-cancel-create').addEventListener('click', () => {
+      createModal.classList.add('hidden');
+    });
+
+    versionSelect.addEventListener('change', updateLoaderBuilds);
+    loaderSelect.addEventListener('change', updateLoaderBuilds);
+
+    async function updateLoaderBuilds() {
+      const selectedLoader = loaderSelect.value;
+      const selectedMcVersion = versionSelect.value;
+
+      if (selectedLoader === 'vanilla' || !selectedMcVersion) {
+        loaderGroup.classList.add('hidden');
+        return;
+      }
+
+      loaderGroup.classList.remove('hidden');
+      loaderVersionSelect.innerHTML = '<option value="">Loading compatible builds...</option>';
+
+      try {
+        let builds = [];
+
+        if (selectedLoader === 'fabric') {
+          loaderLabel.innerText = 'Fabric Loader Build';
+          if (window.api.getFabricVersions) {
+            builds = await window.api.getFabricVersions(selectedMcVersion);
+          } else {
+            const res = await fetch(`https://meta.fabricmc.net/v2/versions/loader/${selectedMcVersion}`);
+            if (res.ok) {
+              const data = await res.json();
+              builds = data.map(item => item.loader ? item.loader.version : item.version).filter(Boolean);
+            }
+          }
+        } else if (selectedLoader === 'forge') {
+          loaderLabel.innerText = 'Forge Loader Build';
+          if (window.api.getForgeVersions) {
+            builds = await window.api.getForgeVersions(selectedMcVersion);
+          } else {
+            const res = await fetch(`https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json`);
+            if (res.ok) {
+              const data = await res.json();
+              const promos = data.promos || {};
+              const keys = Object.keys(promos).filter(k => k.startsWith(`${selectedMcVersion}-`));
+              builds = keys.map(k => promos[k]);
+            }
+          }
+        } else if (selectedLoader === 'neoforge') {
+          loaderLabel.innerText = 'NeoForge Loader Build';
+          if (window.api.getNeoforgeVersions) {
+            builds = await window.api.getNeoforgeVersions(selectedMcVersion);
+          } else {
+            const res = await fetch(`https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge`);
+            if (res.ok) {
+              const data = await res.json();
+              const allVers = data.versions || [];
+              const prefix = selectedMcVersion.replace('1.', '');
+              builds = allVers.filter(v => v.startsWith(prefix) || v.startsWith(selectedMcVersion)).reverse();
+            }
+          }
+        }
+
+        const uniqueBuilds = [...new Set(builds)];
+
+        if (uniqueBuilds.length > 0) {
+          loaderVersionSelect.innerHTML = uniqueBuilds.map(v => `<option value="${v}">${v}</option>`).join('');
+        } else {
+          loaderVersionSelect.innerHTML = `<option value="">No builds found for MC ${selectedMcVersion}</option>`;
+        }
+      } catch (err) {
+        loaderVersionSelect.innerHTML = '<option value="">Failed to fetch loader builds</option>';
+      }
+    }
+
+    document.getElementById('btn-confirm-create').addEventListener('click', async () => {
+      const name = document.getElementById('create-name').value.trim();
+      if (!name) return alert('Please enter an instance name!');
+
+      const version = versionSelect.value;
+      const loader = loaderSelect.value;
+      const loaderVersion = loader !== 'vanilla' ? loaderVersionSelect.value : null;
+
+      await window.api.createInstance({ 
+        name, 
+        version, 
+        loader, 
+        neoforgeVersion: loader === 'neoforge' ? loaderVersion : null,
+        loaderVersion: loaderVersion
+      });
+
+      createModal.classList.add('hidden');
+      document.getElementById('create-name').value = '';
+      loadInstances();
+    });
+
+    // --- INSTANCE DETAILS & TAB MANAGEMENT ---
+    async function openInstanceDetails(instanceName) {
+      currentInstance = instanceName;
+      document.getElementById('selected-instance-title').innerText = instanceName;
+      showView('view-instance-details');
+      updateTabControlsUI();
+      loadAddonsForCurrentTab();
+    }
+
+    document.querySelectorAll('.addon-tab').forEach(tabBtn => {
+      tabBtn.addEventListener('click', (e) => {
+        document.querySelectorAll('.addon-tab').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        currentAddonTab = e.target.dataset.tab;
+        updateTabControlsUI();
+        loadAddonsForCurrentTab();
+      });
+    });
+
+    function updateTabControlsUI() {
+      const searchInput = document.getElementById('addon-search-input');
+      const addBtn = document.getElementById('btn-add-addon');
+      searchInput.value = '';
+
+      if (currentAddonTab === 'mods') {
+        searchInput.placeholder = 'Search installed mods...';
+        addBtn.innerText = '+ Add Mods';
+      } else if (currentAddonTab === 'resourcepacks') {
+        searchInput.placeholder = 'Search installed resource packs...';
+        addBtn.innerText = '+ Add Resource Packs';
+      } else if (currentAddonTab === 'shaders') {
+        searchInput.placeholder = 'Search installed shaders...';
+        addBtn.innerText = '+ Add Shaders';
+      }
+    }
+
+    async function loadAddonsForCurrentTab() {
+      if (!currentInstance) return;
+      const listContainer = document.getElementById('addons-list');
+      listContainer.innerHTML = '<p>Loading installed items...</p>';
+
+      if (currentAddonTab === 'mods') {
+        installedAddonsCache = await window.api.getMods(currentInstance);
+      } else if (currentAddonTab === 'resourcepacks') {
+        installedAddonsCache = await window.api.getResourcepacks(currentInstance);
+      } else if (currentAddonTab === 'shaders') {
+        installedAddonsCache = await window.api.getShaders(currentInstance);
+      }
+
+      filterAndRenderInstalledAddons();
+    }
+
+    // --- LOCAL SEARCH FILTERING ---
+    function filterAndRenderInstalledAddons() {
+      const query = document.getElementById('addon-search-input').value.toLowerCase().trim();
+      
+      const filtered = installedAddonsCache.filter(item => {
+        const title = (item.title || '').toLowerCase();
+        const desc = (item.description || '').toLowerCase();
+        const filename = (item.filename || '').toLowerCase();
+        const version = (item.version || '').toLowerCase();
+        return title.includes(query) || desc.includes(query) || filename.includes(query) || version.includes(query);
+      });
+
+      renderAddonsList(filtered);
+    }
+
+    document.getElementById('addon-search-input').addEventListener('input', () => {
+      filterAndRenderInstalledAddons();
+    });
+
+    document.getElementById('btn-search-installed').addEventListener('click', () => {
+      filterAndRenderInstalledAddons();
+    });
+
+    function renderAddonsList(addons) {
+      const listContainer = document.getElementById('addons-list');
+      listContainer.innerHTML = '';
+
+      if (addons.length === 0) {
+        listContainer.innerHTML = `<p>No matching installed ${currentAddonTab} found.</p>`;
+        return;
+      }
+
+      addons.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'addon-card';
+        
+        const versionTag = item.version ? `<span class="version-tag">v${item.version}</span>` : '';
+        const changelogContent = item.changelog || item.releaseNotes || 'No changelog information provided for this release.';
+
+        card.innerHTML = `
+          <div class="addon-main-row">
+            <img src="${item.iconUrl || 'icon/akari-launcher.png'}" class="addon-icon" alt="icon">
+            <div class="addon-details">
+              <div class="addon-title-row">
+                <h4>${item.title}</h4>
+                ${versionTag}
+              </div>
+              <p>${item.description || ''}</p>
+            </div>
+            <div class="addon-actions-group">
+              <button class="btn-changelog-toggle">Changelog ▼</button>
+              <button class="btn-delete-addon">Remove</button>
+            </div>
+          </div>
+          <div class="changelog-drawer hidden">
+            ${changelogContent}
+          </div>
+        `;
+
+        const toggleBtn = card.querySelector('.btn-changelog-toggle');
+        const drawer = card.querySelector('.changelog-drawer');
+        toggleBtn.addEventListener('click', () => {
+          const isHidden = drawer.classList.toggle('hidden');
+          toggleBtn.innerText = isHidden ? 'Changelog ▼' : 'Changelog ▲';
+        });
+
+        card.querySelector('.btn-delete-addon').addEventListener('click', async () => {
+          let type = 'mod';
+          if (currentAddonTab === 'resourcepacks') type = 'resourcepack';
+          if (currentAddonTab === 'shaders') type = 'shader';
+
+          await window.api.deleteAddon({
+            instanceName: currentInstance,
+            filename: item.filename,
+            type: type
+          });
+          loadAddonsForCurrentTab();
+        });
+
+        listContainer.appendChild(card);
+      });
+    }
+
+    // --- ADD ADDONS MODAL (MODRINTH SEARCH POPUP) ---
+    const addAddonModal = document.getElementById('add-addon-modal');
+    const modrinthSearchInput = document.getElementById('modrinth-search-input');
+    const modrinthResultsContainer = document.getElementById('modrinth-search-results');
+
+    document.getElementById('btn-add-addon').addEventListener('click', () => {
+      const typeLabel = currentAddonTab === 'mods' ? 'Mods' : currentAddonTab === 'resourcepacks' ? 'Resource Packs' : 'Shaders';
+      document.getElementById('add-modal-title').innerText = `Add ${typeLabel}`;
+      modrinthSearchInput.value = '';
+      modrinthResultsContainer.innerHTML = '<p>Type a search query above to find addons on Modrinth.</p>';
+      addAddonModal.classList.remove('hidden');
+    });
+
+    document.getElementById('btn-close-add-modal').addEventListener('click', () => {
+      addAddonModal.classList.add('hidden');
+      loadAddonsForCurrentTab();
+    });
+
+    async function executeModrinthSearch() {
+      const query = modrinthSearchInput.value.trim();
+      if (!query || !currentInstance) return;
+
+      modrinthResultsContainer.innerHTML = '<p>Searching Modrinth...</p>';
+
+      const info = await window.api.getInstanceInfo(currentInstance);
+      let projectType = 'mod';
+      if (currentAddonTab === 'resourcepacks') projectType = 'resourcepack';
+      if (currentAddonTab === 'shaders') projectType = 'shader';
+
+      const results = await window.api.searchModrinth({
+        query,
+        version: info.version,
+        loader: info.loader,
+        projectType
+      });
+
+      renderSearchResults(results, projectType, info);
+    }
+
+    document.getElementById('btn-search-modrinth').addEventListener('click', executeModrinthSearch);
+    modrinthSearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') executeModrinthSearch();
+    });
+
+    function renderSearchResults(results, projectType, instanceInfo) {
+      modrinthResultsContainer.innerHTML = '';
+
+      if (results.length === 0) {
+        modrinthResultsContainer.innerHTML = '<p>No results found on Modrinth.</p>';
+        return;
+      }
+
+      results.forEach(project => {
+        const card = document.createElement('div');
+        card.className = 'addon-card';
+
+        const projectId = project.project_id || project.id;
+
+        card.innerHTML = `
+          <div class="addon-main-row">
+            <img src="${project.icon_url || 'icon/akari-launcher.png'}" class="addon-icon" alt="icon">
+            <div class="addon-details">
+              <div class="addon-title-row">
+                <h4>${project.title}</h4>
+              </div>
+              <p>${project.description || ''}</p>
+            </div>
+            <div class="addon-actions-group">
+              <select class="version-select-dropdown">
+                <option value="">Loading versions...</option>
+              </select>
+              <button class="btn-changelog-toggle">Changelog ▼</button>
+              <button class="btn-primary btn-install-addon">Install</button>
+            </div>
+          </div>
+          <div class="changelog-drawer hidden">
+            <p style="color: #a1a1aa; margin: 0;">Loading release notes...</p>
+          </div>
+        `;
+
+        const versionSelect = card.querySelector('.version-select-dropdown');
+        const toggleBtn = card.querySelector('.btn-changelog-toggle');
+        const drawer = card.querySelector('.changelog-drawer');
+        const installBtn = card.querySelector('.btn-install-addon');
+
+        let versionsMap = {};
+        let releaseChangelogsMap = {};
+
+        function updateChangelogDisplay(selectedVerId) {
+          const verObj = versionsMap[selectedVerId];
+          if (!verObj) {
+            drawer.innerText = 'No release notes available.';
+            return;
+          }
+
+          const versionLog = verObj.changelog && verObj.changelog.trim().length > 0 ? verObj.changelog.trim() : null;
+          const releaseGroupLog = releaseChangelogsMap[verObj.version_number] || releaseChangelogsMap[verObj.name];
+          
+          const changelogText = versionLog || releaseGroupLog || project.description || 'No release notes available for this version.';
+          drawer.innerText = changelogText;
+        }
+
+        const targetMcVersion = (instanceInfo.version || '').toLowerCase().trim();
+        const targetLoader = (instanceInfo.loader || '').toLowerCase().trim();
+
+        let fetchUrl = `https://api.modrinth.com/v2/project/${projectId}/version`;
+        const queryParams = [];
+
+        if (targetMcVersion) {
+          queryParams.push(`game_versions=["${encodeURIComponent(targetMcVersion)}"]`);
+        }
+        if (projectType === 'mod' && targetLoader && targetLoader !== 'vanilla') {
+          queryParams.push(`loaders=["${encodeURIComponent(targetLoader)}"]`);
+        }
+
+        if (queryParams.length > 0) {
+          fetchUrl += '?' + queryParams.join('&');
+        }
+
+        fetch(fetchUrl)
+          .then(res => res.ok ? res.json() : [])
+          .then(versions => {
+            versionSelect.innerHTML = '';
+
+            const compatibleVersions = versions.filter(ver => {
+              const matchesGame = !targetMcVersion || (ver.game_versions && ver.game_versions.includes(targetMcVersion));
+              const matchesLoader = projectType !== 'mod' || !targetLoader || targetLoader === 'vanilla' || (ver.loaders && ver.loaders.includes(targetLoader));
+              return matchesGame && matchesLoader;
+            });
+
+            if (!compatibleVersions || compatibleVersions.length === 0) {
+              versionSelect.innerHTML = `<option value="">Incompatible with ${targetLoader ? targetLoader.toUpperCase() : ''} ${targetMcVersion}</option>`;
+              versionSelect.disabled = true;
+              installBtn.disabled = true;
+              installBtn.style.opacity = '0.5';
+              drawer.innerText = 'No compatible release notes available.';
+              return;
+            }
+
+            compatibleVersions.forEach(v => {
+              if (v.changelog && v.changelog.trim().length > 0) {
+                if (v.version_number) releaseChangelogsMap[v.version_number] = v.changelog.trim();
+                if (v.name) releaseChangelogsMap[v.name] = v.changelog.trim();
+              }
+            });
+
+            compatibleVersions.sort((a, b) => new Date(b.date_published).getTime() - new Date(a.date_published).getTime());
+
+            compatibleVersions.forEach(ver => {
+              versionsMap[ver.id] = ver;
+              const mcVers = ver.game_versions ? ver.game_versions.join(', ') : targetMcVersion;
+              const loaderTag = ver.loaders ? ver.loaders.join('/') : targetLoader;
+              const label = `${ver.name || ver.version_number} (${loaderTag} MC ${mcVers})`;
+              
+              const option = document.createElement('option');
+              option.value = ver.id;
+              option.innerText = label;
+              versionSelect.appendChild(option);
+            });
+
+            if (versionSelect.value) {
+              updateChangelogDisplay(versionSelect.value);
+            }
+          })
+          .catch(() => {
+            versionSelect.innerHTML = '<option value="">Failed to load</option>';
+            drawer.innerText = 'Failed to load changelog.';
+          });
+
+        versionSelect.addEventListener('change', () => {
+          updateChangelogDisplay(versionSelect.value);
+        });
+
+        toggleBtn.addEventListener('click', () => {
+          const isHidden = drawer.classList.toggle('hidden');
+          toggleBtn.innerText = isHidden ? 'Changelog ▼' : 'Changelog ▲';
+        });
+
+        installBtn.addEventListener('click', async () => {
+          const selectedVerId = versionSelect.value;
+          const selectedVerObj = versionsMap[selectedVerId];
+
+          if (!selectedVerObj) return;
+
+          installBtn.innerText = 'Installing...';
+          installBtn.disabled = true;
+
+          const payloadProject = {
+            ...project,
+            selectedVersion: selectedVerObj || null
+          };
+
+          await window.api.downloadAddon({
+            instanceName: currentInstance,
+            project: payloadProject,
+            projectType: projectType
+          });
+
+          installBtn.innerText = 'Installed';
+          installBtn.style.backgroundColor = '#10b981';
+        });
+
+        modrinthResultsContainer.appendChild(card);
+      });
+    }
+
+    // --- USER AUTHENTICATION ---
+    const authBtn = document.getElementById('auth-btn');
+    const userDisplay = document.getElementById('user-display');
+
+    async function checkSavedUser() {
+      const user = await window.api.getSavedUser();
+      if (user) {
+        currentUser = user;
+        userDisplay.innerText = `Logged in as: ${user.name}`;
+        authBtn.innerText = 'Log Out';
+      } else {
+        currentUser = null;
+        userDisplay.innerText = 'Logged in as: Offline';
+        authBtn.innerText = 'Log In';
+      }
+    }
+
+    authBtn.addEventListener('click', async () => {
+      if (currentUser) {
+        await window.api.msLogout();
+        checkSavedUser();
+      } else {
+        userDisplay.innerText = 'Logging in...';
+        const user = await window.api.msLogin();
+        checkSavedUser();
+      }
+    });
+
+    // --- SETTINGS & BUTTON LISTENERS ---
+    document.getElementById('btn-launch-selected').addEventListener('click', () => {
+      triggerInstanceLaunch(currentInstance);
+    });
+
+    document.getElementById('btn-open-logs').addEventListener('click', () => {
+      window.api.openLogsWindow();
+    });
+
+    async function loadSettings() {
+      const path = await window.api.getDownloadLocation();
+      document.getElementById('input-download-path').value = path;
+    }
+
+    document.getElementById('btn-change-folder').addEventListener('click', async () => {
+      const res = await window.api.selectDownloadLocation();
+      if (res.success) {
+        document.getElementById('input-download-path').value = res.path;
+        loadInstances();
+      }
+    });
+
+    // Initial Startup
+    checkSavedUser();
+    loadInstances();
+  </script>
+</body>
+</html>
