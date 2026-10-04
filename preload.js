@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('api', {
   
   // Game Execution & Logs
   launchInstance: (name) => ipcRenderer.invoke('launch-instance', name),
+  setDiscordPresenceState: (state) => ipcRenderer.invoke('set-discord-presence-state', state),
   openLogsWindow: () => ipcRenderer.invoke('open-logs-window'),
   openInstanceFolder: (name) => ipcRenderer.invoke('open-instance-folder', name),
   

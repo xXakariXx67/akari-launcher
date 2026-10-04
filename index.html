@@ -1269,7 +1269,15 @@
     let currentUser = null;
     let currentLaunchMode = 'microsoft';
     let installedAddonsCache = [];
+    const installedAddonsByTab = new Map();
     let currentInstanceInfo = null;
+    let instanceDetailsRequestId = 0;
+
+    function setDiscordPresenceState(state) {
+      window.api.setDiscordPresenceState(state).catch(error => {
+        console.warn('Could not update Discord Rich Presence:', error.message);
+      });
+    }
 
     // --- NAVIGATION ---
     function showView(viewId) {
@@ -1283,6 +1291,9 @@
         document.getElementById('nav-instances').classList.add('active');
       } else if (viewId === 'view-settings') {
         document.getElementById('nav-settings').classList.add('active');
+      }
+      if (viewId === 'view-instances' || viewId === 'view-settings') {
+        setDiscordPresenceState('main-menu');
       }
     }
 
@@ -1507,8 +1518,12 @@
 
     // --- INSTANCE DETAILS & TAB MANAGEMENT ---
     async function openInstanceDetails(instanceName) {
+      const requestId = ++instanceDetailsRequestId;
+      setDiscordPresenceState('checking-mods');
+      installedAddonsByTab.clear();
       currentInstance = instanceName;
       currentInstanceInfo = await window.api.getInstanceInfo(instanceName);
+      if (requestId !== instanceDetailsRequestId) return;
       document.getElementById('selected-instance-title').innerText = instanceName;
       const isVanilla = String(currentInstanceInfo.loader || 'vanilla').toLowerCase() === 'vanilla';
       currentAddonTab = isVanilla ? 'resourcepacks' : 'mods';
@@ -1521,7 +1536,7 @@
       });
       showView('view-instance-details');
       updateTabControlsUI();
-      loadAddonsForCurrentTab();
+      await loadAddonsForCurrentTab();
     }
 
     document.querySelectorAll('.addon-tab').forEach(tabBtn => {
@@ -1678,10 +1693,12 @@
       feedback.textContent = 'Checking mod compatibility and downloading updates...';
       feedback.classList.remove('is-error');
       try {
+        const instanceName = currentInstance;
         const result = await window.api.migrateInstanceVersion({
-          instanceName: currentInstance,
+          instanceName,
           version
         });
+        invalidateInstalledAddonsCache(instanceName, 'mods');
         await loadInstanceSettings();
         await loadInstances();
         feedback.textContent =
@@ -1696,19 +1713,41 @@
       }
     });
 
+    function getInstalledAddonsCacheKey(instanceName, tab) {
+      return JSON.stringify([instanceName, tab]);
+    }
+
+    function invalidateInstalledAddonsCache(instanceName, tab) {
+      installedAddonsByTab.delete(getInstalledAddonsCacheKey(instanceName, tab));
+    }
+
     async function loadAddonsForCurrentTab() {
       if (!currentInstance) return;
+      const instanceName = currentInstance;
+      const tab = currentAddonTab;
+      const cacheKey = getInstalledAddonsCacheKey(instanceName, tab);
       const listContainer = document.getElementById('addons-list');
+      if (installedAddonsByTab.has(cacheKey)) {
+        installedAddonsCache = installedAddonsByTab.get(cacheKey);
+        filterAndRenderInstalledAddons();
+        return;
+      }
       listContainer.innerHTML = '<p>Loading installed items...</p>';
 
-      if (currentAddonTab === 'mods') {
-        installedAddonsCache = await window.api.getMods(currentInstance);
-      } else if (currentAddonTab === 'resourcepacks') {
-        installedAddonsCache = await window.api.getResourcepacks(currentInstance);
-      } else if (currentAddonTab === 'shaders') {
-        installedAddonsCache = await window.api.getShaders(currentInstance);
+      let addons = [];
+      if (tab === 'mods') {
+        addons = await window.api.getMods(instanceName);
+      } else if (tab === 'resourcepacks') {
+        addons = await window.api.getResourcepacks(instanceName);
+      } else if (tab === 'shaders') {
+        addons = await window.api.getShaders(instanceName);
       }
 
+      if (currentInstance === instanceName) {
+        installedAddonsByTab.set(cacheKey, addons);
+      }
+      if (currentInstance !== instanceName || currentAddonTab !== tab) return;
+      installedAddonsCache = addons;
       filterAndRenderInstalledAddons();
     }
 
@@ -1772,10 +1811,20 @@
           <div class="changelog-drawer hidden"></div>
         `;
 
-        const iconUrl = typeof item.iconUrl === 'string' && /^https:\/\//i.test(item.iconUrl)
+        const iconUrl = typeof item.iconUrl === 'string' &&
+          (/^https:\/\//i.test(item.iconUrl) || /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(item.iconUrl))
           ? item.iconUrl
           : 'icon/akari-launcher.png';
-        card.querySelector('.addon-icon').src = iconUrl;
+        const addonIcon = card.querySelector('.addon-icon');
+        addonIcon.addEventListener('error', () => {
+          if (addonIcon.dataset.fallbackApplied) {
+            addonIcon.hidden = true;
+            return;
+          }
+          addonIcon.dataset.fallbackApplied = 'true';
+          addonIcon.src = 'icon/akari-launcher.png';
+        });
+        addonIcon.src = iconUrl;
         card.querySelector('.addon-title').textContent = item.title || '';
         card.querySelector('.addon-description').textContent = item.description || '';
         const addonVersion = card.querySelector('.addon-version');
@@ -1793,14 +1842,18 @@
           toggleButton.textContent = isEnabled ? 'Disable' : 'Enable';
           toggleButton.setAttribute('aria-label', `${isEnabled ? 'Disable' : 'Enable'} ${item.title || item.filename}`);
           toggleButton.addEventListener('click', async () => {
+            const instanceName = currentInstance;
             toggleButton.disabled = true;
             try {
               await window.api.setModEnabled({
-                instanceName: currentInstance,
+                instanceName,
                 filename: item.filename,
                 enabled: !isEnabled
               });
-              await loadAddonsForCurrentTab();
+              invalidateInstalledAddonsCache(instanceName, 'mods');
+              if (currentInstance === instanceName && currentAddonTab === 'mods') {
+                await loadAddonsForCurrentTab();
+              }
             } catch (error) {
               console.error('Failed to change mod enabled state:', error);
               alert(`Could not ${isEnabled ? 'disable' : 'enable'} mod: ${error.message}`);
@@ -1816,17 +1869,44 @@
           toggleBtn.innerText = isHidden ? 'Changelog ▼' : 'Changelog ▲';
         });
 
-        card.querySelector('.btn-delete-addon').addEventListener('click', async () => {
+        const deleteButton = card.querySelector('.btn-delete-addon');
+        deleteButton.addEventListener('click', async () => {
           let type = 'mod';
           if (currentAddonTab === 'resourcepacks') type = 'resourcepack';
           if (currentAddonTab === 'shaders') type = 'shader';
 
-          await window.api.deleteAddon({
-            instanceName: currentInstance,
-            filename: item.filename,
-            type: type
-          });
-          loadAddonsForCurrentTab();
+          const instanceName = currentInstance;
+          const addonTab = currentAddonTab;
+          deleteButton.disabled = true;
+          try {
+            const deleted = await window.api.deleteAddon({
+              instanceName,
+              filename: item.filename,
+              type
+            });
+            if (!deleted) throw new Error('The addon could not be removed.');
+            invalidateInstalledAddonsCache(instanceName, addonTab);
+
+            if (currentInstance === instanceName && currentAddonTab === addonTab) {
+              installedAddonsCache = installedAddonsCache.filter(
+                addon => addon.filename !== item.filename
+              );
+              installedAddonsByTab.set(
+                getInstalledAddonsCacheKey(instanceName, addonTab),
+                installedAddonsCache
+              );
+              card.remove();
+              if (document.getElementById('addons-list').childElementCount === 0) {
+                const emptyMessage = document.createElement('p');
+                emptyMessage.textContent = `No matching installed ${currentAddonTab} found.`;
+                document.getElementById('addons-list').appendChild(emptyMessage);
+              }
+            }
+          } catch (error) {
+            console.error('Failed to remove addon:', error);
+            alert(`Could not remove ${item.title || item.filename}: ${error.message}`);
+            deleteButton.disabled = false;
+          }
         });
 
         listContainer.appendChild(card);
@@ -2039,6 +2119,8 @@
 
           if (!selectedVerObj) return;
 
+          const instanceName = currentInstance;
+          const addonTab = currentAddonTab;
           installBtn.innerText = 'Installing...';
           installBtn.disabled = true;
 
@@ -2048,7 +2130,7 @@
           };
 
           const installed = await window.api.downloadAddon({
-            instanceName: currentInstance,
+            instanceName,
             project: payloadProject,
             projectType: projectType
           });
@@ -2061,6 +2143,7 @@
 
           installBtn.innerText = 'Installed';
           installBtn.style.backgroundColor = '#10b981';
+          invalidateInstalledAddonsCache(instanceName, addonTab);
         });
 
         modrinthResultsContainer.appendChild(card);

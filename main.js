@@ -5,11 +5,25 @@ const axios = require('axios');
 const crypto = require('crypto');
 const { Auth } = require('msmc');
 const { Client, Authenticator } = require('minecraft-launcher-core');
+const { Client: DiscordRPCClient } = require('@xhayper/discord-rpc');
 const { execFileSync, spawnSync } = require('child_process');
+const { readModIconDataUrl } = require('./mod-icons');
 
 let mainWindow;
 let logsWindow = null;
 let userAuth = null;
+let discordPresenceClient = null;
+let discordPresenceRetryTimer = null;
+let discordPresenceConnecting = false;
+let discordPresenceStopped = false;
+let discordPresenceUnavailableLogged = false;
+let discordPresenceWasConnected = false;
+let discordPresenceDetails = 'Main Menu';
+const discordPlayingInstances = [];
+
+const DISCORD_APPLICATION_ID = '1556299312915284060';
+const DISCORD_LARGE_IMAGE_KEY = 'akari-launcher-discord-1024';
+const DISCORD_PRESENCE_RETRY_MS = 15000;
 
 const defaultDataPath = path.join(app.getPath('userData'), 'instances');
 const authFile = path.join(app.getPath('userData'), 'auth.json');
@@ -69,12 +83,117 @@ app.whenReady().then(async () => {
   const instancesDir = await getInstancesDir();
   await fs.ensureDir(instancesDir);
   createWindow();
+  startDiscordPresence();
 
   const settings = await readAppSettings();
   if (settings.autoCheckUpdates) {
     autoUpdater.checkForUpdatesAndNotify().catch((err) => {
       console.error("Update check failed:", err);
     });
+  }
+});
+
+function scheduleDiscordPresenceRetry(delay = DISCORD_PRESENCE_RETRY_MS) {
+  if (discordPresenceStopped || discordPresenceRetryTimer) return;
+  discordPresenceRetryTimer = setTimeout(() => {
+    discordPresenceRetryTimer = null;
+    connectDiscordPresence();
+  }, delay);
+  discordPresenceRetryTimer.unref();
+}
+
+async function connectDiscordPresence() {
+  if (discordPresenceStopped || discordPresenceConnecting ||
+      !discordPresenceClient || discordPresenceClient.isConnected) {
+    return;
+  }
+
+  discordPresenceConnecting = true;
+  try {
+    await discordPresenceClient.login();
+    discordPresenceWasConnected = true;
+    discordPresenceUnavailableLogged = false;
+    await updateDiscordPresenceActivity();
+  } catch (error) {
+    if (discordPresenceClient.isConnected) {
+      console.warn('Could not set Discord Rich Presence:', error.message);
+    } else {
+      if (!discordPresenceUnavailableLogged) {
+        console.info('Discord Rich Presence is unavailable; it will retry while the launcher is open.', error.message);
+        discordPresenceUnavailableLogged = true;
+      }
+      try {
+        await discordPresenceClient.destroy();
+      } catch (disconnectError) {
+        console.warn('Could not close the Discord Rich Presence connection:', disconnectError.message);
+      }
+    }
+  } finally {
+    discordPresenceConnecting = false;
+    if (!discordPresenceStopped && !discordPresenceClient.isConnected) {
+      scheduleDiscordPresenceRetry();
+    }
+  }
+}
+
+function updateDiscordPresenceActivity() {
+  if (!discordPresenceClient || !discordPresenceClient.isConnected ||
+      !discordPresenceClient.user) {
+    return Promise.resolve();
+  }
+  const playingInstance = discordPlayingInstances[discordPlayingInstances.length - 1];
+  return discordPresenceClient.user.setActivity({
+    name: 'Akari Launcher',
+    details: playingInstance ? `Playing ${playingInstance}` : discordPresenceDetails,
+    largeImageKey: DISCORD_LARGE_IMAGE_KEY,
+    largeImageText: 'Akari Launcher'
+  });
+}
+
+function startDiscordPresence() {
+  discordPresenceClient = new DiscordRPCClient({ clientId: DISCORD_APPLICATION_ID });
+  discordPresenceClient.on('disconnected', () => {
+    if (discordPresenceWasConnected) {
+      discordPresenceWasConnected = false;
+      scheduleDiscordPresenceRetry(1000);
+    }
+  });
+  void connectDiscordPresence();
+}
+
+ipcMain.handle('set-discord-presence-state', async (event, state) => {
+  if (state !== 'main-menu' && state !== 'checking-mods') {
+    throw new Error('Invalid Discord Rich Presence state.');
+  }
+  discordPresenceDetails = state === 'checking-mods' ? 'Checking Mods' : 'Main Menu';
+  if (discordPlayingInstances.length === 0) {
+    await updateDiscordPresenceActivity();
+  }
+  return true;
+});
+
+app.on('before-quit', () => {
+  discordPresenceStopped = true;
+  if (discordPresenceRetryTimer) {
+    clearTimeout(discordPresenceRetryTimer);
+    discordPresenceRetryTimer = null;
+  }
+  if (discordPresenceClient) {
+    const client = discordPresenceClient;
+    void (async () => {
+      if (client.user) {
+        try {
+          await client.user.clearActivity();
+        } catch (error) {
+          console.warn('Could not clear Discord Rich Presence:', error.message);
+        }
+      }
+      try {
+        await client.destroy();
+      } catch (error) {
+        console.warn('Could not close Discord Rich Presence:', error.message);
+      }
+    })();
   }
 });
 
@@ -1005,11 +1124,26 @@ async function loadFolderAddons(instanceName, subFolder, metaFileName) {
 
   const defaultIcon = 'https://raw.githubusercontent.com/modrinth/knights-canvas/main/static/assets/logo.png';
 
-  return entries
+  const visibleEntries = entries
     .filter(({ filename }) => !(subFolder === 'mods' &&
-      metadata[filename] && metadata[filename].managedBy === 'akari-offline-skin'))
-    .map(({ filename, enabled }) => {
+      metadata[filename] && metadata[filename].managedBy === 'akari-offline-skin'));
+  const addons = [];
+  for (let index = 0; index < visibleEntries.length; index += 4) {
+    const batch = visibleEntries.slice(index, index + 4);
+    addons.push(...await Promise.all(batch.map(async ({ filename, enabled }) => {
       const info = metadata[filename] || {};
+      let iconUrl = null;
+      if (subFolder === 'mods') {
+        const directory = enabled ? targetDir : path.join(instancePath, 'disabled-mods');
+        try {
+          iconUrl = await readModIconDataUrl(path.join(directory, filename));
+        } catch (error) {
+          console.warn(`Could not read icon from mod ${filename}:`, error.message);
+        }
+      }
+      if (!iconUrl && typeof info.iconUrl === 'string' && /^https:\/\//i.test(info.iconUrl)) {
+        iconUrl = info.iconUrl;
+      }
       return {
         filename,
         enabled,
@@ -1017,10 +1151,12 @@ async function loadFolderAddons(instanceName, subFolder, metaFileName) {
         versionNumber: info.versionNumber || '',
         projectId: info.projectId || null,
         changelog: info.changelog || 'No changelog recorded.',
-        iconUrl: (info.iconUrl && info.iconUrl.startsWith('http')) ? info.iconUrl : defaultIcon,
+        iconUrl: iconUrl || defaultIcon,
         description: info.description || filename
       };
-    });
+    })));
+  }
+  return addons;
 }
 
 ipcMain.handle('get-mods', async (event, instanceName) => {
@@ -1831,7 +1967,16 @@ ipcMain.handle('launch-instance', async (event, instanceName) => {
     }
   });
   launcher.on('debug', (e) => sendLogToWindows(`[DEBUG] ${e.toString()}\n`));
-  launcher.on('close', (code) => sendLogToWindows(`[INFO] Game process exited with code ${code}\n`));
+  launcher.on('close', (code) => {
+    sendLogToWindows(`[INFO] Game process exited with code ${code}\n`);
+    const runningIndex = discordPlayingInstances.lastIndexOf(name);
+    if (runningIndex >= 0) {
+      discordPlayingInstances.splice(runningIndex, 1);
+      void updateDiscordPresenceActivity().catch(error => {
+        console.warn('Could not update Discord Rich Presence after Minecraft closed:', error.message);
+      });
+    }
+  });
   launcher.on('error', (err) => {
     console.error("Launcher Error:", err);
     sendLogToWindows(`[ERROR] Launch Failed: ${err.message || err}\n`);
@@ -1839,6 +1984,10 @@ ipcMain.handle('launch-instance', async (event, instanceName) => {
 
   try {
     await launcher.launch(opts);
+    discordPlayingInstances.push(name);
+    void updateDiscordPresenceActivity().catch(error => {
+      console.warn('Could not update Discord Rich Presence for the running instance:', error.message);
+    });
     return `Launching ${name}...`;
   } catch (err) {
     console.error("Launch Exception:", err);
