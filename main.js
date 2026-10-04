@@ -1,11 +1,11 @@
-const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs-extra');
 const axios = require('axios');
 const crypto = require('crypto');
 const { Auth } = require('msmc');
 const { Client, Authenticator } = require('minecraft-launcher-core');
-const { execSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 let mainWindow;
 let logsWindow = null;
@@ -25,9 +25,16 @@ const DEFAULT_APP_SETTINGS = {
 const APP_THEMES = ['dark', 'midnight', 'light'];
 const CUSTOM_SKINLOADER_PROJECT_ID = 'idMHQ4n2';
 const OFFLINE_SKIN_PROFILE_NAME = 'Akari Launcher Offline Skin';
+const OFFLINE_SKIN_PROFILE_PATH = 'AkariLauncherOfflineSkin/skins/{USERNAME}.png';
 
 function isValidOfflineUsername(username) {
   return typeof username === 'string' && /^[A-Za-z0-9_]{3,16}$/.test(username);
+}
+
+function hideManagedModFile(filePath) {
+  if (process.platform === 'win32') {
+    execFileSync('attrib.exe', ['+h', filePath], { windowsHide: true, stdio: 'pipe' });
+  }
 }
 
 function isValidHttpsImageUrl(value) {
@@ -72,9 +79,272 @@ app.whenReady().then(async () => {
 });
 
 const DEFAULT_VERSIONS = [
-  '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
-  '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.12.2', '1.8.9'
+  '26.3', '26.2', '26.1.2', '26.1.1', '26.1', '1.21.11', '1.21.10',
+  '1.21.9', '1.21.8', '1.21.7', '1.21.6', '1.21.5', '1.21.4', '1.21.3',
+  '1.21.2', '1.21.1', '1.21', '1.20.6', '1.20.4', '1.20.2', '1.20.1',
+  '1.19.4', '1.19.2', '1.18.2', '1.17.1', '1.16.5', '1.16.4', '1.16.3',
+  '1.16.2'
 ];
+const MIN_MINECRAFT_VERSION = '1.16.2';
+const MOJANG_JAVA_RUNTIME_INDEX_URL =
+  'https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json';
+const minecraftJavaVersions = new Map();
+let javaRuntimeManifestPromise = null;
+
+function compareMinecraftVersions(left, right) {
+  const leftParts = left.split('.').map(Number);
+  const rightParts = right.split('.').map(Number);
+  for (let i = 0; i < Math.max(leftParts.length, rightParts.length); i++) {
+    const difference = (leftParts[i] || 0) - (rightParts[i] || 0);
+    if (difference) return difference;
+  }
+  return 0;
+}
+
+function isSupportedMinecraftVersion(version) {
+  return typeof version === 'string' &&
+    /^\d+\.\d+(?:\.\d+)?$/.test(version) &&
+    compareMinecraftVersions(version, MIN_MINECRAFT_VERSION) >= 0;
+}
+
+function getNeoForgeVersionPrefix(minecraftVersion) {
+  if (typeof minecraftVersion !== 'string' || !/^\d+\.\d+(?:\.\d+)?$/.test(minecraftVersion)) {
+    return null;
+  }
+  const version = minecraftVersion.startsWith('1.')
+    ? minecraftVersion.slice(2)
+    : minecraftVersion;
+  const [major, minor] = version.split('.');
+  return `${major}.${minor}.`;
+}
+
+function getMojangJavaMajorVersion(executablePath) {
+  const result = spawnSync(executablePath, ['-version'], {
+    encoding: 'utf8',
+    windowsHide: true
+  });
+  if (result.error) return null;
+  const versionOutput = `${result.stdout || ''}\n${result.stderr || ''}`;
+  const versionMatch = /version\s+"(?:1\.)?(\d+)/i.exec(versionOutput);
+  return versionMatch ? Number(versionMatch[1]) : null;
+}
+
+function getLocalJavaPaths() {
+  const javaExecutable = process.platform === 'win32' ? 'java.exe' : 'java';
+  const paths = [];
+  if (process.env.JAVA_HOME) {
+    paths.push(path.join(process.env.JAVA_HOME, 'bin', javaExecutable));
+  }
+  try {
+    const command = process.platform === 'win32' ? 'where.exe' : 'which';
+    const found = execFileSync(command, ['java'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    });
+    paths.push(...found.split(/\r?\n/).filter(Boolean));
+  } catch {}
+  return [...new Set(paths)];
+}
+
+function getRuntimePlatform() {
+  if (process.platform !== 'win32') {
+    throw new Error('Automatic Minecraft Java runtime setup is currently supported on Windows only.');
+  }
+  if (!['x64', 'arm64', 'ia32'].includes(process.arch)) {
+    throw new Error(`Unsupported Windows architecture for Minecraft Java: ${process.arch}.`);
+  }
+  return `windows-${process.arch === 'ia32' ? 'x86' : process.arch}`;
+}
+
+async function getMinecraftJavaVersion(minecraftVersion) {
+  if (minecraftJavaVersions.has(minecraftVersion)) {
+    return minecraftJavaVersions.get(minecraftVersion);
+  }
+  const manifestResponse = await axios.get(
+    'https://launchermeta.mojang.com/mc/game/version_manifest.json',
+    { timeout: 20000, headers: { 'User-Agent': 'AkariLauncher/1.0.0' } }
+  );
+  const versionEntry = (manifestResponse.data.versions || [])
+    .find(entry => entry && entry.id === minecraftVersion && entry.type === 'release');
+  if (!versionEntry || !versionEntry.url) {
+    throw new Error(`Could not find Minecraft ${minecraftVersion} runtime metadata.`);
+  }
+  const profileUrl = new URL(versionEntry.url);
+  if (profileUrl.protocol !== 'https:' ||
+      !['launchermeta.mojang.com', 'piston-meta.mojang.com'].includes(profileUrl.hostname)) {
+    throw new Error('Mojang returned an unexpected Minecraft version metadata URL.');
+  }
+  const profileResponse = await axios.get(profileUrl.toString(), {
+    timeout: 20000,
+    headers: { 'User-Agent': 'AkariLauncher/1.0.0' }
+  });
+  const majorVersion = profileResponse.data &&
+    profileResponse.data.javaVersion &&
+    profileResponse.data.javaVersion.majorVersion;
+  if (!Number.isInteger(majorVersion) || majorVersion < 8) {
+    throw new Error(`Mojang did not specify a valid Java runtime for Minecraft ${minecraftVersion}.`);
+  }
+  minecraftJavaVersions.set(minecraftVersion, {
+    majorVersion,
+    component: profileResponse.data.javaVersion.component
+  });
+  return minecraftJavaVersions.get(minecraftVersion);
+}
+
+async function getJavaRuntimeManifest() {
+  if (!javaRuntimeManifestPromise) {
+    javaRuntimeManifestPromise = axios.get(MOJANG_JAVA_RUNTIME_INDEX_URL, {
+      timeout: 20000,
+      headers: { 'User-Agent': 'AkariLauncher/1.0.0' }
+    }).then(response => response.data).catch(error => {
+      javaRuntimeManifestPromise = null;
+      throw error;
+    });
+  }
+  return javaRuntimeManifestPromise;
+}
+
+async function installMojangJavaRuntime(component, platform) {
+  const runtimeIndex = await getJavaRuntimeManifest();
+  const availableVersions = runtimeIndex[platform] && runtimeIndex[platform][component];
+  if (!Array.isArray(availableVersions) || availableVersions.length === 0) {
+    throw new Error(`Mojang has no ${component} runtime for ${platform}.`);
+  }
+  const runtime = [...availableVersions].sort((left, right) =>
+    Date.parse(right.version && right.version.released) -
+    Date.parse(left.version && left.version.released)
+  )[0];
+  const runtimeManifestInfo = runtime && runtime.manifest;
+  if (!runtimeManifestInfo ||
+      !/^[a-f0-9]{40}$/i.test(runtimeManifestInfo.sha1 || '') ||
+      typeof runtimeManifestInfo.url !== 'string') {
+    throw new Error(`Mojang returned invalid metadata for the ${component} runtime.`);
+  }
+  const manifestUrl = new URL(runtimeManifestInfo.url);
+  if (manifestUrl.protocol !== 'https:' ||
+      !['piston-meta.mojang.com', 'launchermeta.mojang.com'].includes(manifestUrl.hostname)) {
+    throw new Error('Mojang returned an unexpected Java runtime manifest URL.');
+  }
+
+  const runtimesPath = path.join(app.getPath('userData'), 'runtimes');
+  const runtimePath = path.join(runtimesPath, component, runtimeManifestInfo.sha1);
+  const javaPath = path.join(runtimePath, 'bin', 'java.exe');
+  const markerPath = path.join(runtimePath, '.akari-runtime.json');
+  if (await fs.pathExists(javaPath) && await fs.pathExists(markerPath)) {
+    return javaPath;
+  }
+
+  const manifestResponse = await axios.get(manifestUrl.toString(), {
+    responseType: 'arraybuffer',
+    timeout: 30000,
+    maxContentLength: 10 * 1024 * 1024,
+    headers: { 'User-Agent': 'AkariLauncher/1.0.0' }
+  });
+  const manifestBytes = Buffer.from(manifestResponse.data);
+  if ((runtimeManifestInfo.size && manifestBytes.length !== runtimeManifestInfo.size) ||
+      crypto.createHash('sha1').update(manifestBytes).digest('hex').toLowerCase() !==
+      runtimeManifestInfo.sha1.toLowerCase()) {
+    throw new Error(`The ${component} runtime manifest failed its integrity check.`);
+  }
+  let runtimeManifest;
+  try {
+    runtimeManifest = JSON.parse(manifestBytes.toString('utf8'));
+  } catch {
+    throw new Error(`Mojang returned invalid ${component} runtime data.`);
+  }
+  if (!runtimeManifest.files || typeof runtimeManifest.files !== 'object') {
+    throw new Error(`Mojang returned an incomplete ${component} runtime manifest.`);
+  }
+
+  await fs.ensureDir(runtimesPath);
+  const stagingPath = await fs.mkdtemp(path.join(runtimesPath, '.akari-runtime-'));
+  try {
+    const files = Object.entries(runtimeManifest.files);
+    let nextFileIndex = 0;
+    let completedFiles = 0;
+    let lastLoggedProgress = -10;
+    const worker = async () => {
+      while (nextFileIndex < files.length) {
+        const index = nextFileIndex++;
+        const [relativePath, fileInfo] = files[index];
+        const destination = path.resolve(stagingPath, ...relativePath.split(/[\\/]/));
+        if (path.relative(stagingPath, destination).startsWith('..')) {
+          throw new Error('Mojang returned an unsafe path in the Java runtime manifest.');
+        }
+        if (!fileInfo || fileInfo.type === 'directory') {
+          await fs.ensureDir(destination);
+        } else {
+          if (fileInfo.type !== 'file' ||
+              !fileInfo.downloads || !fileInfo.downloads.raw ||
+              !/^[a-f0-9]{40}$/i.test(fileInfo.downloads.raw.sha1 || '') ||
+              !Number.isSafeInteger(fileInfo.downloads.raw.size) ||
+              typeof fileInfo.downloads.raw.url !== 'string') {
+            throw new Error(`Mojang returned an unsupported Java runtime file: ${relativePath}.`);
+          }
+          const fileUrl = new URL(fileInfo.downloads.raw.url);
+          if (fileUrl.protocol !== 'https:' ||
+              !['piston-data.mojang.com', 'launcher.mojang.com'].includes(fileUrl.hostname)) {
+            throw new Error('Mojang returned an unexpected Java runtime file URL.');
+          }
+          const download = await axios.get(fileUrl.toString(), {
+            responseType: 'arraybuffer',
+            timeout: 120000,
+            maxContentLength: fileInfo.downloads.raw.size,
+            headers: { 'User-Agent': 'AkariLauncher/1.0.0' }
+          });
+          const bytes = Buffer.from(download.data);
+          if (bytes.length !== fileInfo.downloads.raw.size ||
+              crypto.createHash('sha1').update(bytes).digest('hex').toLowerCase() !==
+                fileInfo.downloads.raw.sha1.toLowerCase()) {
+            throw new Error(`Java runtime file failed its integrity check: ${relativePath}.`);
+          }
+          await fs.ensureDir(path.dirname(destination));
+          await fs.writeFile(destination, bytes, { flag: 'wx' });
+        }
+        const progress = Math.floor((++completedFiles / files.length) * 100);
+        if (progress >= lastLoggedProgress + 10) {
+          lastLoggedProgress = progress;
+          sendLogToWindows(`[PROGRESS] Downloading Java ${runtime.version.name}: ${progress}%\n`);
+        }
+      }
+    };
+    const workerResults = await Promise.allSettled(
+      Array.from({ length: 8 }, () => worker())
+    );
+    const failedWorker = workerResults.find(result => result.status === 'rejected');
+    if (failedWorker) throw failedWorker.reason;
+    if (!await fs.pathExists(path.join(stagingPath, 'bin', 'java.exe'))) {
+      throw new Error(`The downloaded ${component} runtime has no java.exe.`);
+    }
+    await fs.writeJson(path.join(stagingPath, '.akari-runtime.json'), {
+      component,
+      version: runtime.version.name,
+      manifestSha1: runtimeManifestInfo.sha1
+    });
+    await fs.remove(runtimePath);
+    await fs.ensureDir(path.dirname(runtimePath));
+    await fs.move(stagingPath, runtimePath);
+  } finally {
+    await fs.remove(stagingPath);
+  }
+  return javaPath;
+}
+
+async function resolveMinecraftJava(minecraftVersion) {
+  const required = await getMinecraftJavaVersion(minecraftVersion);
+  for (const javaPath of getLocalJavaPaths()) {
+    if (getMojangJavaMajorVersion(javaPath) === required.majorVersion) {
+      return { javaPath, majorVersion: required.majorVersion };
+    }
+  }
+  const platform = getRuntimePlatform();
+  const javaPath = await installMojangJavaRuntime(required.component, platform);
+  if (getMojangJavaMajorVersion(javaPath) !== required.majorVersion) {
+    throw new Error(`The downloaded Java runtime does not match the required Java ${required.majorVersion}.`);
+  }
+  return { javaPath, majorVersion: required.majorVersion };
+}
 
 async function getInstancesDir() {
   try {
@@ -175,6 +445,8 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 950,
     height: 700,
+    minWidth: 782,
+    minHeight: 686,
     title: `Akari Launcher v${app.getVersion()}`,
     resizable: true,
     icon: appIconPath,
@@ -288,6 +560,15 @@ ipcMain.handle('open-logs-window', () => {
   return true;
 });
 
+ipcMain.handle('open-instance-folder', async (event, instanceName) => {
+  const instancesDir = await getInstancesDir();
+  const { instancePath } = resolveInstancePath(instancesDir, instanceName);
+  await fs.ensureDir(instancePath);
+  const error = await shell.openPath(instancePath);
+  if (error) throw new Error(`Could not open instance folder: ${error}`);
+  return true;
+});
+
 ipcMain.handle('get-saved-user', async () => {
   try {
     if (await fs.pathExists(authFile)) {
@@ -329,11 +610,13 @@ ipcMain.handle('get-mc-versions', async () => {
     const res = await axios.get('https://launchermeta.mojang.com/mc/game/version_manifest.json', {
       headers: { 'User-Agent': 'AkariLauncher/1.0.0' }
     });
-    const versions = res.data.versions.filter(v => v.type === 'release').map(v => v.id);
+    const versions = res.data.versions
+      .filter(v => v.type === 'release' && isSupportedMinecraftVersion(v.id))
+      .map(v => v.id);
     return versions.length > 0 ? versions : DEFAULT_VERSIONS;
   } catch (error) {
     console.error('Failed to fetch MC versions, using default list:', error.message);
-    return DEFAULT_VERSIONS;
+    return DEFAULT_VERSIONS.filter(isSupportedMinecraftVersion);
   }
 });
 
@@ -345,18 +628,8 @@ ipcMain.handle('get-neoforge-versions', async (event, mcVersion) => {
 
     const versions = mavenRes.data.versions || [];
 
-    let targetPrefix = '';
-    if (mcVersion === '1.20.1') {
-      targetPrefix = '47.1.';
-    } else {
-      const parts = mcVersion.split('.');
-      if (parts.length >= 2) {
-        const major = parts[1];
-        const minor = parts[2] || '0';
-        targetPrefix = `${major}.${minor}.`;
-      }
-    }
-
+    const targetPrefix = getNeoForgeVersionPrefix(mcVersion);
+    if (!targetPrefix) return [];
     return versions.filter(v => v.startsWith(targetPrefix)).reverse();
   } catch (err) {
     console.error("Failed to fetch NeoForge versions:", err.message);
@@ -391,6 +664,18 @@ ipcMain.handle('create-instance', async (event, payload) => {
   const version = (typeof payload === 'object' && payload.version) ? payload.version : '1.20.1';
   const loader = (typeof payload === 'object' && payload.loader) ? payload.loader : 'vanilla';
   const neoforgeVersion = (typeof payload === 'object' && payload.neoforgeVersion) ? payload.neoforgeVersion : null;
+  if (!isSupportedMinecraftVersion(version)) {
+    throw new Error(`Minecraft ${MIN_MINECRAFT_VERSION} or newer is required.`);
+  }
+  if (!['vanilla', 'fabric', 'forge', 'neoforge'].includes(loader)) {
+    throw new Error('Invalid Minecraft loader.');
+  }
+  if (loader === 'neoforge') {
+    const prefix = getNeoForgeVersionPrefix(version);
+    if (!prefix || typeof neoforgeVersion !== 'string' || !neoforgeVersion.startsWith(prefix)) {
+      throw new Error(`No compatible NeoForge build was selected for Minecraft ${version}.`);
+    }
+  }
   const memory = normalizeMemorySettings(payload && payload.memory);
 
   const modsPath = path.join(instancePath, 'mods');
@@ -494,7 +779,7 @@ ipcMain.handle('migrate-instance-version', async (event, payload) => {
   if (!payload || typeof payload !== 'object' ||
       typeof payload.instanceName !== 'string' ||
       typeof payload.version !== 'string' ||
-      !/^\d+\.\d+(?:\.\d+)?$/.test(payload.version)) {
+      !isSupportedMinecraftVersion(payload.version)) {
     throw new Error('Invalid Minecraft version migration request');
   }
 
@@ -708,21 +993,34 @@ async function loadFolderAddons(instanceName, subFolder, metaFileName) {
     metadata = await fs.readJson(metadataPath);
   }
 
+  if (subFolder === 'mods') {
+    for (const entry of entries) {
+      const info = metadata[entry.filename];
+      if (info && info.managedBy === 'akari-offline-skin') {
+        const folder = entry.enabled ? 'mods' : 'disabled-mods';
+        hideManagedModFile(path.join(instancePath, folder, entry.filename));
+      }
+    }
+  }
+
   const defaultIcon = 'https://raw.githubusercontent.com/modrinth/knights-canvas/main/static/assets/logo.png';
 
-  return entries.map(({ filename, enabled }) => {
-    const info = metadata[filename] || {};
-    return {
-      filename,
-      enabled,
-      title: info.title || filename.replace(/\.(jar|zip)$/, ''),
-      versionNumber: info.versionNumber || '',
-      projectId: info.projectId || null,
-      changelog: info.changelog || 'No changelog recorded.',
-      iconUrl: (info.iconUrl && info.iconUrl.startsWith('http')) ? info.iconUrl : defaultIcon,
-      description: info.description || filename
-    };
-  });
+  return entries
+    .filter(({ filename }) => !(subFolder === 'mods' &&
+      metadata[filename] && metadata[filename].managedBy === 'akari-offline-skin'))
+    .map(({ filename, enabled }) => {
+      const info = metadata[filename] || {};
+      return {
+        filename,
+        enabled,
+        title: info.title || filename.replace(/\.(jar|zip)$/, ''),
+        versionNumber: info.versionNumber || '',
+        projectId: info.projectId || null,
+        changelog: info.changelog || 'No changelog recorded.',
+        iconUrl: (info.iconUrl && info.iconUrl.startsWith('http')) ? info.iconUrl : defaultIcon,
+        description: info.description || filename
+      };
+    });
 }
 
 ipcMain.handle('get-mods', async (event, instanceName) => {
@@ -979,6 +1277,11 @@ ipcMain.handle('download-addon', async (event, payload) => {
       loader = config.loader || loader;
     }
 
+    if (projectType === 'mod' && String(loader).toLowerCase() === 'vanilla') {
+      sendLogToWindows('[ERROR] Cannot install mods into a Vanilla instance. Create a Fabric, Forge, or NeoForge instance first.\n');
+      return false;
+    }
+
     const projectId = project.project_id || project.id || project.slug;
     await downloadProjectWithDependencies(projectId, cleanInstanceName, projectType, version, loader, specificVersionId);
     return true;
@@ -1024,9 +1327,12 @@ async function resolveOfflineSkinUrl(mode, value) {
   } catch {
     throw new Error(`No skin is set for Mojang profile "${value}".`);
   }
-  if (parsedSkinUrl.protocol !== 'https:' || parsedSkinUrl.hostname !== 'textures.minecraft.net') {
+  if (!['http:', 'https:'].includes(parsedSkinUrl.protocol) ||
+      parsedSkinUrl.hostname !== 'textures.minecraft.net' ||
+      parsedSkinUrl.username || parsedSkinUrl.password) {
     throw new Error('Mojang returned an unexpected skin URL.');
   }
+  parsedSkinUrl.protocol = 'https:';
   return parsedSkinUrl.toString();
 }
 
@@ -1136,10 +1442,12 @@ async function installCustomSkinLoader(instancePath, minecraftVersion, loader) {
     projectId: CUSTOM_SKINLOADER_PROJECT_ID,
     projectVersionId: release.id,
     versionNumber: release.version_number || '',
+    iconUrl: `https://cdn.modrinth.com/data/${CUSTOM_SKINLOADER_PROJECT_ID}/icon.png`,
     description: 'Installed by Akari Launcher for custom offline skins.',
     managedBy: 'akari-offline-skin'
   };
   try {
+    hideManagedModFile(targetPath);
     await fs.writeJson(metadataPath, nextMetadata);
   } catch (error) {
     if (movedFromDisabled) {
@@ -1152,18 +1460,40 @@ async function installCustomSkinLoader(instancePath, minecraftVersion, loader) {
   }
 }
 
-async function updateCustomSkinLoaderProfile(instancePath, skinUrl) {
+async function updateCustomSkinLoaderProfile(instancePath, skinUrl, username) {
   const dataPath = path.join(instancePath, 'CustomSkinLoader');
   const configPath = path.join(dataPath, 'CustomSkinLoader.json');
   const extraListPath = path.join(dataPath, 'ExtraList', 'AkariLauncherOfflineSkin.json');
+  const skinPath = path.join(dataPath, 'AkariLauncherOfflineSkin', 'skins', `${username}.png`);
   const isEnabled = Boolean(skinUrl);
   const profile = {
     name: OFFLINE_SKIN_PROFILE_NAME,
     type: 'Legacy',
-    skin: skinUrl || '',
+    skin: OFFLINE_SKIN_PROFILE_PATH,
     model: 'auto',
     checkPNG: false
   };
+
+  if (isEnabled) {
+    if (!isValidOfflineUsername(username)) {
+      throw new Error('Cannot configure an offline skin for an invalid username.');
+    }
+    const response = await axios.get(skinUrl, {
+      responseType: 'arraybuffer',
+      timeout: 15000,
+      maxContentLength: 2 * 1024 * 1024
+    });
+    const skinBytes = Buffer.from(response.data);
+    const pngSignature = Buffer.from('89504e470d0a1a0a', 'hex');
+    if (skinBytes.length < pngSignature.length ||
+        !skinBytes.subarray(0, pngSignature.length).equals(pngSignature)) {
+      throw new Error('Mojang returned an invalid skin image.');
+    }
+    await fs.ensureDir(path.dirname(skinPath));
+    await fs.writeFile(skinPath, skinBytes);
+  } else {
+    await fs.remove(skinPath);
+  }
 
   if (await fs.pathExists(configPath)) {
     let config;
@@ -1255,7 +1585,7 @@ ipcMain.handle('launch-instance', async (event, instanceName) => {
       offlineSkinUrl = await resolveOfflineSkinUrl(settings.offlineSkinMode, settings.offlineSkinValue);
       await installCustomSkinLoader(instanceRoot, version, selectedLoader);
     }
-    await updateCustomSkinLoaderProfile(instanceRoot, offlineSkinUrl);
+    await updateCustomSkinLoaderProfile(instanceRoot, offlineSkinUrl, settings.offlineUsername);
     if (offlineSkinUrl) {
       sendLogToWindows('[INFO] Custom offline skin configured for this instance.\n');
     }
@@ -1278,12 +1608,22 @@ ipcMain.handle('launch-instance', async (event, instanceName) => {
     memory: {
       max: `${memory.max}G`,
       min: `${memory.min}G`
-    }
+    },
+    timeout: 120000
   };
 
   sendLogToWindows(offlineMode
     ? `[INFO] Launching in offline mode as ${settings.offlineUsername}. Online-mode servers require Microsoft authentication.\n`
     : '[INFO] Launching with Microsoft authentication.\n');
+
+  try {
+    const javaRuntime = await resolveMinecraftJava(version);
+    opts.javaPath = javaRuntime.javaPath;
+    sendLogToWindows(`[INFO] Using Java ${javaRuntime.majorVersion} for Minecraft ${version}.\n`);
+  } catch (error) {
+    sendLogToWindows(`[ERROR] Could not prepare Java for Minecraft ${version}: ${error.message}\n`);
+    return `Could not prepare Java for Minecraft ${version}: ${error.message}`;
+  }
 
   if (selectedLoader === 'fabric') {
     try {
@@ -1346,7 +1686,38 @@ ipcMain.handle('launch-instance', async (event, instanceName) => {
         await fs.writeFile(installerPath, Buffer.from(jarRes.data));
       }
 
-      opts.forge = installerPath;
+      if (compareMinecraftVersions(version, '26.0') >= 0) {
+        const customVersionName = `${version}-forge-${forgeVersionNum}`;
+        const versionDir = path.join(instanceRoot, 'versions', customVersionName);
+        const installedJsonPath = path.join(versionDir, `${customVersionName}.json`);
+        if (!await fs.pathExists(installedJsonPath)) {
+          const profilesPath = path.join(instanceRoot, 'launcher_profiles.json');
+          if (!await fs.pathExists(profilesPath)) {
+            await fs.writeJson(profilesPath, { profiles: {} });
+          }
+          sendLogToWindows('[INFO] Installing Forge client profile...\n');
+          execFileSync(opts.javaPath, ['-jar', installerPath, '--installClient', instanceRoot], {
+            cwd: instanceRoot,
+            stdio: 'pipe',
+            windowsHide: true
+          });
+        }
+        if (!await fs.pathExists(installedJsonPath)) {
+          throw new Error(`Forge installer did not create the ${customVersionName} profile.`);
+        }
+        const forgeJson = await fs.readJson(installedJsonPath);
+        opts.version.custom = customVersionName;
+        opts.customArgs = (forgeJson.arguments && Array.isArray(forgeJson.arguments.jvm)
+          ? forgeJson.arguments.jvm
+          : [])
+          .filter(arg => typeof arg === 'string')
+          .map(arg => arg
+            .replace(/\${library_directory}/g, path.join(instanceRoot, 'libraries'))
+            .replace(/\${classpath_separator}/g, path.delimiter)
+            .replace(/\${version_name}/g, version));
+      } else {
+        opts.forge = installerPath;
+      }
       sendLogToWindows(`[INFO] Forge installer configured successfully.\n`);
     } catch (err) {
       sendLogToWindows(`[ERROR] Failed to setup Forge: ${err.message}\n`);
@@ -1365,17 +1736,9 @@ ipcMain.handle('launch-instance', async (event, instanceName) => {
         });
 
         const versions = mavenRes.data.versions || [];
-        
-        let targetPrefix = '';
-        if (version === '1.20.1') {
-          targetPrefix = '47.1.';
-        } else {
-          const parts = version.split('.');
-          if (parts.length >= 2) {
-            const major = parts[1];
-            const minor = parts[2] || '0';
-            targetPrefix = `${major}.${minor}.`;
-          }
+        const targetPrefix = getNeoForgeVersionPrefix(version);
+        if (!targetPrefix) {
+          throw new Error(`Invalid Minecraft version for NeoForge: ${version}`);
         }
 
         const validVersions = versions.filter(v => v.startsWith(targetPrefix));
@@ -1385,6 +1748,11 @@ ipcMain.handle('launch-instance', async (event, instanceName) => {
         }
 
         targetNeoVersion = validVersions[validVersions.length - 1];
+      }
+
+      const targetPrefix = getNeoForgeVersionPrefix(version);
+      if (!targetPrefix || !targetNeoVersion.startsWith(targetPrefix)) {
+        throw new Error(`NeoForge ${targetNeoVersion} does not support Minecraft ${version}.`);
       }
 
       sendLogToWindows(`[INFO] Selected NeoForge target: ${targetNeoVersion} for MC ${version}\n`);
@@ -1410,7 +1778,11 @@ ipcMain.handle('launch-instance', async (event, instanceName) => {
         }
 
         sendLogToWindows(`[INFO] Extracting NeoForge dependencies...\n`);
-        execSync(`java -jar "${installerPath}" --install-client "${instanceRoot}"`, { cwd: instanceRoot, stdio: 'pipe' });
+        execFileSync(opts.javaPath, ['-jar', installerPath, '--install-client', instanceRoot], {
+          cwd: instanceRoot,
+          stdio: 'pipe',
+          windowsHide: true
+        });
       }
 
       if (await fs.pathExists(installedJsonPath)) {

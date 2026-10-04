@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('api', {
   // Game Execution & Logs
   launchInstance: (name) => ipcRenderer.invoke('launch-instance', name),
   openLogsWindow: () => ipcRenderer.invoke('open-logs-window'),
+  openInstanceFolder: (name) => ipcRenderer.invoke('open-instance-folder', name),
   
   // Log Receiver Listener
   onLogData: (callback) => {

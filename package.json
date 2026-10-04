@@ -1,11 +1,12 @@
 {
   "name": "akari-launcher",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "pnpm exec electron-builder"
+    "dist": "pnpm exec electron-builder",
+    "release": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\publish.ps1"
   },
   "dependencies": {
     "@xmcl/installer": "^6.3.4",

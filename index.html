@@ -346,6 +346,7 @@
 
     .content {
       flex: 1;
+      min-width: 0;
       padding: 34px 38px;
       overflow-y: auto;
       height: 100vh;
@@ -573,12 +574,14 @@
     .addon-icon {
       width: 44px;
       height: 44px;
+      flex: 0 0 44px;
       border-radius: 9px;
       object-fit: cover;
     }
 
     .addon-details {
       flex: 1;
+      min-width: 0;
     }
 
     .addon-title-row {
@@ -590,6 +593,7 @@
     .addon-details h4 {
       margin: 0;
       font-size: 16px;
+      overflow-wrap: anywhere;
     }
 
     .version-tag {
@@ -773,11 +777,22 @@
       min-width: 160px;
     }
 
+    .settings-row-offline-skin {
+      flex-wrap: wrap;
+    }
+
+    .settings-row-offline-skin > div:first-child {
+      flex: 1 1 180px;
+      min-width: 0;
+    }
+
     .offline-skin-controls {
       display: grid;
-      grid-template-columns: minmax(145px, 0.8fr) minmax(190px, 1.2fr);
+      grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
       gap: 8px;
-      width: min(420px, 58%);
+      flex: 1 1 320px;
+      width: auto;
+      min-width: 0;
     }
 
     .offline-skin-controls input,
@@ -968,7 +983,7 @@
       .addon-actions-group {
         width: 100%;
         flex-wrap: wrap;
-        padding-left: 59px;
+        justify-content: flex-end;
       }
 
       .settings-group {
@@ -981,7 +996,20 @@
 
       .offline-skin-controls {
         width: 100%;
-        grid-template-columns: minmax(125px, 0.8fr) minmax(160px, 1.2fr);
+        grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+      }
+    }
+
+    @media (min-width: 701px) and (max-width: 900px) {
+      .addon-main-row {
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+
+      .addon-actions-group {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: flex-end;
       }
     }
 
@@ -1045,6 +1073,7 @@
           </div>
           <div class="header-actions">
             <button id="btn-open-logs" class="btn-secondary">Logs</button>
+            <button id="btn-open-instance-folder" class="btn-secondary" title="Open this instance's folder">Folder</button>
             <button id="btn-launch-selected" class="btn-primary">Play</button>
           </div>
         </div>
@@ -1146,16 +1175,16 @@
             </div>
             <input id="setting-offline-username" type="text" minlength="3" maxlength="16" pattern="[A-Za-z0-9_]{3,16}" value="Player" autocomplete="off">
           </div>
-          <div class="settings-row">
+          <div class="settings-row settings-row-offline-skin">
             <div>
               <label for="setting-offline-skin-mode">Offline skin</label>
-              <p class="settings-description">Client-side only; other players may not see it. Works in Offline mode with Fabric, Forge, or NeoForge; URLs must be direct HTTPS images.</p>
+              <p class="settings-description">Client-side only, other players may not see it. Works in Offline mode with Fabric, Forge, or NeoForge, URLs must be direct HTTPS images.</p>
             </div>
             <div class="offline-skin-controls">
               <select id="setting-offline-skin-mode" aria-label="Offline skin source">
                 <option value="none">No custom skin</option>
-                <option value="url">HTTPS image URL</option>
-                <option value="mojang">Mojang username</option>
+                <option value="url">URL</option>
+                <option value="mojang">Mojang</option>
               </select>
               <input id="setting-offline-skin-value" type="text" maxlength="2048" placeholder="Choose a skin source" autocomplete="off" disabled>
             </div>
@@ -1366,12 +1395,15 @@
     async function updateLoaderBuilds() {
       const selectedLoader = loaderSelect.value;
       const selectedMcVersion = versionSelect.value;
+      const createButton = document.getElementById('btn-confirm-create');
 
       if (selectedLoader === 'vanilla' || !selectedMcVersion) {
         loaderGroup.classList.add('hidden');
+        createButton.disabled = selectedLoader !== 'vanilla';
         return;
       }
 
+      createButton.disabled = true;
       loaderGroup.classList.remove('hidden');
       loaderVersionSelect.innerHTML = '<option value="">Loading compatible builds...</option>';
 
@@ -1411,8 +1443,10 @@
             if (res.ok) {
               const data = await res.json();
               const allVers = data.versions || [];
-              const prefix = selectedMcVersion.replace('1.', '');
-              builds = allVers.filter(v => v.startsWith(prefix) || v.startsWith(selectedMcVersion)).reverse();
+              const prefix = selectedMcVersion.startsWith('1.')
+                ? selectedMcVersion.slice(2)
+                : selectedMcVersion;
+              builds = allVers.filter(v => v.startsWith(`${prefix}.`)).reverse();
             }
           }
         }
@@ -1426,6 +1460,7 @@
             option.textContent = v;
             return option;
           }));
+          createButton.disabled = false;
         } else {
           const option = document.createElement('option');
           option.textContent = `No builds found for MC ${selectedMcVersion}`;
@@ -1433,6 +1468,7 @@
         }
       } catch (err) {
         loaderVersionSelect.innerHTML = '<option value="">Failed to fetch loader builds</option>';
+        createButton.disabled = true;
       }
     }
 
@@ -1472,8 +1508,14 @@
     // --- INSTANCE DETAILS & TAB MANAGEMENT ---
     async function openInstanceDetails(instanceName) {
       currentInstance = instanceName;
+      currentInstanceInfo = await window.api.getInstanceInfo(instanceName);
       document.getElementById('selected-instance-title').innerText = instanceName;
-      currentAddonTab = 'mods';
+      const isVanilla = String(currentInstanceInfo.loader || 'vanilla').toLowerCase() === 'vanilla';
+      currentAddonTab = isVanilla ? 'resourcepacks' : 'mods';
+      document.querySelectorAll('.addon-tab').forEach(tabBtn => {
+        tabBtn.hidden = isVanilla &&
+          ['mods', 'shaders'].includes(tabBtn.dataset.tab);
+      });
       document.querySelectorAll('.addon-tab').forEach(tabBtn => {
         tabBtn.classList.toggle('active', tabBtn.dataset.tab === currentAddonTab);
       });
@@ -1511,12 +1553,20 @@
       if (currentAddonTab === 'mods') {
         searchInput.placeholder = 'Search installed mods...';
         addBtn.innerText = '+ Add Mods';
+        const isVanilla = !currentInstanceInfo ||
+          String(currentInstanceInfo.loader || 'vanilla').toLowerCase() === 'vanilla';
+        addBtn.disabled = isVanilla;
+        addBtn.title = isVanilla ? 'Mods require a mod loader such as Fabric, Forge, or NeoForge.' : '';
       } else if (currentAddonTab === 'resourcepacks') {
         searchInput.placeholder = 'Search installed resource packs...';
         addBtn.innerText = '+ Add Resource Packs';
+        addBtn.disabled = false;
+        addBtn.title = '';
       } else if (currentAddonTab === 'shaders') {
         searchInput.placeholder = 'Search installed shaders...';
         addBtn.innerText = '+ Add Shaders';
+        addBtn.disabled = false;
+        addBtn.title = '';
       }
     }
 
@@ -1789,6 +1839,11 @@
     const modrinthResultsContainer = document.getElementById('modrinth-search-results');
 
     document.getElementById('btn-add-addon').addEventListener('click', () => {
+      if (currentAddonTab === 'mods' &&
+          (!currentInstanceInfo ||
+           String(currentInstanceInfo.loader || 'vanilla').toLowerCase() === 'vanilla')) {
+        return;
+      }
       const typeLabel = currentAddonTab === 'mods' ? 'Mods' : currentAddonTab === 'resourcepacks' ? 'Resource Packs' : 'Shaders';
       document.getElementById('add-modal-title').innerText = `Add ${typeLabel}`;
       modrinthSearchInput.value = '';
@@ -1804,6 +1859,14 @@
     async function executeModrinthSearch() {
       const query = modrinthSearchInput.value.trim();
       if (!query || !currentInstance) return;
+
+      if (currentAddonTab === 'mods' &&
+          (!currentInstanceInfo ||
+           String(currentInstanceInfo.loader || 'vanilla').toLowerCase() === 'vanilla')) {
+        modrinthResultsContainer.innerHTML =
+          '<p>Minecraft mods require a mod loader. Create a Fabric, Forge, or NeoForge instance to add mods.</p>';
+        return;
+      }
 
       modrinthResultsContainer.innerHTML = '<p>Searching Modrinth...</p>';
 
@@ -1984,11 +2047,17 @@
             selectedVersion: selectedVerObj || null
           };
 
-          await window.api.downloadAddon({
+          const installed = await window.api.downloadAddon({
             instanceName: currentInstance,
             project: payloadProject,
             projectType: projectType
           });
+
+          if (!installed) {
+            installBtn.innerText = 'Install failed';
+            drawer.innerText = 'Could not install this addon. Check the launcher logs for details.';
+            return;
+          }
 
           installBtn.innerText = 'Installed';
           installBtn.style.backgroundColor = '#10b981';
@@ -2068,6 +2137,15 @@
 
     document.getElementById('btn-open-logs').addEventListener('click', () => {
       window.api.openLogsWindow();
+    });
+
+    document.getElementById('btn-open-instance-folder').addEventListener('click', async () => {
+      try {
+        await window.api.openInstanceFolder(currentInstance);
+      } catch (error) {
+        console.error('Failed to open instance folder:', error);
+        alert(`Could not open instance folder: ${error.message}`);
+      }
     });
 
     async function loadSettings() {
